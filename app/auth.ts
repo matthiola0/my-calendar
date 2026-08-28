@@ -12,7 +12,7 @@ export type CurrentUser = {
 
 const SESSION_COOKIE = 'calendar_session';
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
-const PASSWORD_ITERATIONS = 210_000;
+const PASSWORD_ITERATIONS = 100_000;
 
 type PasswordUserRow = {
   id: string;
