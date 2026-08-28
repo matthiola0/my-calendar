@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Task = {
   id: string;
@@ -12,13 +12,19 @@ type DayEntry = {
   tasks: Task[];
   activity: string;
   reflection: string;
+  revision: string | null;
 };
 
-type SyncStatus = 'loading' | 'saving' | 'saved' | 'error';
+type SyncStatus = 'loading' | 'saving' | 'saved' | 'conflict' | 'error';
 
-const LEGACY_STORAGE_KEY = 'my-daybook-entries-v1';
-const LEGACY_MIGRATION_KEY = 'my-daybook-cloud-migration-v1';
-const emptyEntry: DayEntry = { tasks: [], activity: '', reflection: '' };
+const emptyEntry: DayEntry = {
+  tasks: [],
+  activity: '',
+  reflection: '',
+  revision: null,
+};
+
+class SaveConflictError extends Error {}
 
 function dateKey(date: Date) {
   const year = date.getFullYear();
@@ -53,20 +59,9 @@ async function writeEntry(date: string, entry: DayEntry) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date, ...entry }),
   });
+  if (response.status === 409) throw new SaveConflictError();
   if (!response.ok) throw new Error('Unable to save entry');
-}
-
-async function migrateLegacyEntries() {
-  if (window.localStorage.getItem(LEGACY_MIGRATION_KEY)) return;
-
-  const saved = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-  if (saved) {
-    const entries = JSON.parse(saved) as Record<string, DayEntry>;
-    for (const [date, entry] of Object.entries(entries)) {
-      await writeEntry(date, entry);
-    }
-  }
-  window.localStorage.setItem(LEGACY_MIGRATION_KEY, new Date().toISOString());
+  return response.json() as Promise<{ revision: string }>;
 }
 
 export default function Daybook({ userName }: { userName: string }) {
@@ -76,8 +71,11 @@ export default function Daybook({ userName }: { userName: string }) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('loading');
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDraftRef = useRef<{ date: string; entry: DayEntry } | null>(null);
+  const revisionsRef = useRef<Record<string, string | null>>({});
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const saveSequenceRef = useRef(0);
+  const saveErrorRef = useRef<unknown>(null);
+  const isUnmountingRef = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -87,9 +85,9 @@ export default function Daybook({ userName }: { userName: string }) {
 
     async function load() {
       try {
-        await migrateLegacyEntries();
         const entry = await readEntry(selectedDate, controller.signal);
         if (!controller.signal.aborted) {
+          revisionsRef.current[selectedDate] = entry.revision;
           setEntries((current) => ({ ...current, [selectedDate]: entry }));
           setSyncStatus('saved');
         }
@@ -101,13 +99,6 @@ export default function Daybook({ userName }: { userName: string }) {
     load();
     return () => controller.abort();
   }, [selectedDate]);
-
-  useEffect(
-    () => () => {
-      if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
-    },
-    [],
-  );
 
   const entry = entries[selectedDate] ?? emptyEntry;
   const selected = fromDateKey(selectedDate);
@@ -124,25 +115,51 @@ export default function Daybook({ userName }: { userName: string }) {
     [selectedDate],
   );
 
-  const flushPendingSave = () => {
+  const flushPendingSave = useCallback(() => {
     if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
     pendingTimerRef.current = null;
     const draft = pendingDraftRef.current;
     pendingDraftRef.current = null;
-    if (!draft) return;
+    if (!draft) return saveQueueRef.current;
 
     const sequence = ++saveSequenceRef.current;
-    setSyncStatus('saving');
+    if (!isUnmountingRef.current) setSyncStatus('saving');
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
-      .then(() => writeEntry(draft.date, draft.entry))
-      .then(() => {
-        if (sequence === saveSequenceRef.current) setSyncStatus('saved');
+      .then(async () => {
+        const revision = revisionsRef.current[draft.date] ?? draft.entry.revision;
+        const saved = await writeEntry(draft.date, { ...draft.entry, revision });
+        revisionsRef.current[draft.date] = saved.revision;
+        saveErrorRef.current = null;
+        if (!isUnmountingRef.current) {
+          setEntries((current) => {
+            const currentEntry = current[draft.date];
+            return currentEntry
+              ? {
+                  ...current,
+                  [draft.date]: { ...currentEntry, revision: saved.revision },
+                }
+              : current;
+          });
+          if (sequence === saveSequenceRef.current) setSyncStatus('saved');
+        }
       })
-      .catch(() => {
-        if (sequence === saveSequenceRef.current) setSyncStatus('error');
+      .catch((error) => {
+        saveErrorRef.current = error;
+        if (!isUnmountingRef.current && sequence === saveSequenceRef.current) {
+          setSyncStatus(error instanceof SaveConflictError ? 'conflict' : 'error');
+        }
       });
-  };
+    return saveQueueRef.current;
+  }, []);
+
+  useEffect(
+    () => () => {
+      isUnmountingRef.current = true;
+      void flushPendingSave();
+    },
+    [flushPendingSave],
+  );
 
   const updateEntry = (
     update: (current: DayEntry) => DayEntry,
@@ -201,10 +218,13 @@ export default function Daybook({ userName }: { userName: string }) {
     loading: '正在讀取雲端資料…',
     saving: '正在同步…',
     saved: '已同步至雲端',
+    conflict: '其他裝置已更新，請重新整理',
     error: '同步失敗，請檢查網路',
   }[syncStatus];
 
   const signOut = async () => {
+    await flushPendingSave();
+    if (saveErrorRef.current) return;
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.replace('/');
   };
@@ -220,7 +240,7 @@ export default function Daybook({ userName }: { userName: string }) {
           </span>
         </a>
         <div className="header-meta">
-          <div className={syncStatus === 'error' ? 'save-status error' : 'save-status'} role="status">
+          <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status">
             <span className="status-dot" aria-hidden="true" />
             {statusText}
           </div>

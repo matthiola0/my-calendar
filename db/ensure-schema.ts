@@ -5,8 +5,18 @@ let schemaPromise: Promise<void> | null = null;
 export function ensureSchema() {
   if (!schemaPromise) {
     const db = getDatabaseBinding();
-    schemaPromise = db
-      .batch([
+    schemaPromise = initializeSchema(db)
+      .catch((error) => {
+        schemaPromise = null;
+        throw error;
+      });
+  }
+
+  return schemaPromise;
+}
+
+async function initializeSchema(db: D1Database) {
+  await db.batch([
         db.prepare(`
           CREATE TABLE IF NOT EXISTS password_users (
             id TEXT PRIMARY KEY NOT NULL,
@@ -70,34 +80,91 @@ export function ensureSchema() {
             date TEXT NOT NULL,
             activity TEXT NOT NULL DEFAULT '',
             reflection TEXT NOT NULL DEFAULT '',
+            revision TEXT NOT NULL DEFAULT '',
             updated_at INTEGER NOT NULL,
             PRIMARY KEY (owner_id, date)
           )
         `),
         db.prepare(`
           CREATE TABLE IF NOT EXISTS tasks (
-            id TEXT PRIMARY KEY NOT NULL,
+            id TEXT NOT NULL,
             owner_id TEXT NOT NULL,
             date TEXT NOT NULL,
             text TEXT NOT NULL,
             done INTEGER NOT NULL DEFAULT 0,
             position INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, id)
           )
         `),
         db.prepare(`
           CREATE INDEX IF NOT EXISTS idx_tasks_owner_date_position
           ON tasks (owner_id, date, position)
         `),
-        db.prepare('PRAGMA optimize'),
-      ])
-      .then(() => undefined)
-      .catch((error) => {
-        schemaPromise = null;
-        throw error;
-      });
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS rate_limits (
+            key TEXT PRIMARY KEY NOT NULL,
+            window_start INTEGER NOT NULL,
+            count INTEGER NOT NULL
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_rate_limits_window_start
+          ON rate_limits (window_start)
+        `),
+    db.prepare('PRAGMA optimize'),
+  ]);
+
+  const dayColumns = await db
+    .prepare('PRAGMA table_info(day_entries)')
+    .all<{ name: string }>();
+  if (!dayColumns.results.some((column) => column.name === 'revision')) {
+    await db
+      .prepare("ALTER TABLE day_entries ADD COLUMN revision TEXT NOT NULL DEFAULT ''")
+      .run();
   }
 
-  return schemaPromise;
+  const taskColumns = await db
+    .prepare('PRAGMA table_info(tasks)')
+    .all<{ name: string; pk: number }>();
+  const ownerPrimaryKey = taskColumns.results.find(
+    (column) => column.name === 'owner_id',
+  )?.pk;
+  const idPrimaryKey = taskColumns.results.find(
+    (column) => column.name === 'id',
+  )?.pk;
+
+  if (ownerPrimaryKey !== 1 || idPrimaryKey !== 2) {
+    await db.batch([
+      db.prepare('DROP TABLE IF EXISTS tasks_owner_scoped'),
+      db.prepare(`
+        CREATE TABLE tasks_owner_scoped (
+          id TEXT NOT NULL,
+          owner_id TEXT NOT NULL,
+          date TEXT NOT NULL,
+          text TEXT NOT NULL,
+          done INTEGER NOT NULL DEFAULT 0,
+          position INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (owner_id, id)
+        )
+      `),
+      db.prepare(`
+        INSERT INTO tasks_owner_scoped
+          (id, owner_id, date, text, done, position, created_at, updated_at)
+        SELECT id, owner_id, date, text, done, position, created_at, updated_at
+        FROM tasks
+      `),
+      db.prepare('DROP TABLE tasks'),
+      db.prepare('ALTER TABLE tasks_owner_scoped RENAME TO tasks'),
+      db.prepare(`
+        CREATE INDEX idx_tasks_owner_date_position
+        ON tasks (owner_id, date, position)
+      `),
+    ]);
+  }
+
+  await db.prepare('PRAGMA optimize').run();
 }

@@ -56,6 +56,7 @@ export const dayEntries = sqliteTable(
     date: text('date').notNull(),
     activity: text('activity').notNull().default(''),
     reflection: text('reflection').notNull().default(''),
+    revision: text('revision').notNull().default(''),
     updatedAt: integer('updated_at').notNull(),
   },
   (table) => [primaryKey({ columns: [table.ownerId, table.date] })],
@@ -64,7 +65,7 @@ export const dayEntries = sqliteTable(
 export const tasks = sqliteTable(
   'tasks',
   {
-    id: text('id').primaryKey(),
+    id: text('id').notNull(),
     ownerId: text('owner_id').notNull(),
     date: text('date').notNull(),
     text: text('text').notNull(),
@@ -74,10 +75,21 @@ export const tasks = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   (table) => [
+    primaryKey({ columns: [table.ownerId, table.id] }),
     index('idx_tasks_owner_date_position').on(
       table.ownerId,
       table.date,
       table.position,
     ),
   ],
+);
+
+export const rateLimits = sqliteTable(
+  'rate_limits',
+  {
+    key: text('key').primaryKey(),
+    windowStart: integer('window_start').notNull(),
+    count: integer('count').notNull(),
+  },
+  (table) => [index('idx_rate_limits_window_start').on(table.windowStart)],
 );

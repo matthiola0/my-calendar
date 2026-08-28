@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { getCurrentUser } from '../../auth';
+import { getCurrentUser } from '../../lib/auth';
 import { ensureSchema } from '../../../db/ensure-schema';
 import { getDatabaseBinding } from '../../../db';
 
@@ -18,6 +18,7 @@ type DayEntry = {
   tasks: Task[];
   activity: string;
   reflection: string;
+  revision: string | null;
 };
 
 type TaskRow = {
@@ -37,10 +38,10 @@ export async function GET(request: Request) {
   const db = getDatabaseBinding();
   const day = await db
     .prepare(
-      'SELECT activity, reflection FROM day_entries WHERE owner_id = ? AND date = ?',
+      'SELECT activity, reflection, revision FROM day_entries WHERE owner_id = ? AND date = ?',
     )
     .bind(ownerId, date)
-    .first<{ activity: string; reflection: string }>();
+    .first<{ activity: string; reflection: string; revision: string }>();
   const taskRows = await db
     .prepare(
       'SELECT id, text, done FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC',
@@ -57,6 +58,7 @@ export async function GET(request: Request) {
       })),
       activity: day?.activity ?? '',
       reflection: day?.reflection ?? '',
+      revision: day?.revision ?? null,
     } satisfies DayEntry,
     { headers: { 'Cache-Control': 'no-store' } },
   );
@@ -82,30 +84,74 @@ export async function PUT(request: Request) {
   await ensureSchema();
   const db = getDatabaseBinding();
   const now = Date.now();
+  const nextRevision = crypto.randomUUID();
+  const dayMutation = entry.revision === null
+    ? db
+      .prepare(`
+        INSERT INTO day_entries (owner_id, date, activity, reflection, revision, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(owner_id, date) DO NOTHING
+      `)
+      .bind(ownerId, date, entry.activity, entry.reflection, nextRevision, now)
+    : db
+      .prepare(`
+        UPDATE day_entries SET
+          activity = ?,
+          reflection = ?,
+          revision = ?,
+          updated_at = ?
+        WHERE owner_id = ? AND date = ? AND revision = ?
+      `)
+      .bind(
+        entry.activity,
+        entry.reflection,
+        nextRevision,
+        now,
+        ownerId,
+        date,
+        entry.revision,
+      );
   const statements = [
+    dayMutation,
     db
       .prepare(`
-        INSERT INTO day_entries (owner_id, date, activity, reflection, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(owner_id, date) DO UPDATE SET
-          activity = excluded.activity,
-          reflection = excluded.reflection,
-          updated_at = excluded.updated_at
+        DELETE FROM tasks
+        WHERE owner_id = ? AND date = ?
+          AND EXISTS (
+            SELECT 1 FROM day_entries
+            WHERE owner_id = ? AND date = ? AND revision = ?
+          )
       `)
-      .bind(ownerId, date, entry.activity, entry.reflection, now),
-    db.prepare('DELETE FROM tasks WHERE owner_id = ? AND date = ?').bind(ownerId, date),
+      .bind(ownerId, date, ownerId, date, nextRevision),
     ...entry.tasks.map((task, position) =>
       db
         .prepare(`
           INSERT INTO tasks (id, owner_id, date, text, done, position, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM day_entries
+            WHERE owner_id = ? AND date = ? AND revision = ?
+          )
         `)
-        .bind(task.id, ownerId, date, task.text, task.done ? 1 : 0, position, now, now),
+        .bind(
+          task.id,
+          ownerId,
+          date,
+          task.text,
+          task.done ? 1 : 0,
+          position,
+          now,
+          now,
+          ownerId,
+          date,
+          nextRevision,
+        ),
     ),
   ];
 
-  await db.batch(statements);
-  return Response.json({ ok: true, updatedAt: now });
+  const results = await db.batch(statements);
+  if (!results[0].meta.changes) return conflict();
+  return Response.json({ ok: true, revision: nextRevision, updatedAt: now });
 }
 
 async function getAuthorizedOwnerId(request: Request) {
@@ -138,6 +184,8 @@ function parseEntry(body: unknown):
   if (
     typeof candidate.activity !== 'string' ||
     typeof candidate.reflection !== 'string' ||
+    (candidate.revision !== null && typeof candidate.revision !== 'string') ||
+    (typeof candidate.revision === 'string' && candidate.revision.length > 100) ||
     candidate.activity.length > 20_000 ||
     candidate.reflection.length > 20_000
   ) {
@@ -177,6 +225,7 @@ function parseEntry(body: unknown):
       tasks,
       activity: candidate.activity,
       reflection: candidate.reflection,
+      revision: candidate.revision,
     },
   };
 }
@@ -207,4 +256,11 @@ function unauthorized() {
 
 function invalidDate() {
   return Response.json({ error: '日期格式不正確。' }, { status: 400 });
+}
+
+function conflict() {
+  return Response.json(
+    { error: '這一天已在其他裝置更新，請重新讀取後再試。' },
+    { status: 409 },
+  );
 }

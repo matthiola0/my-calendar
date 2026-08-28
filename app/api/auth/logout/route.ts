@@ -1,4 +1,4 @@
-import { deleteAppSession } from '../../../auth';
+import { deleteAppSession } from '../../../lib/auth';
 
 export async function POST(request: Request) {
   const cookie = await deleteAppSession(request);

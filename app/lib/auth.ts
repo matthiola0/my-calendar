@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { cookies } from 'next/headers';
-import { ensureSchema } from '../db/ensure-schema';
-import { getDatabaseBinding } from '../db';
+import { ensureSchema } from '../../db/ensure-schema';
+import { getDatabaseBinding } from '../../db';
 
 export type CurrentUser = {
   ownerId: string;
@@ -11,6 +11,7 @@ export type CurrentUser = {
 const SESSION_COOKIE = 'calendar_session';
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 const PASSWORD_ITERATIONS = 100_000;
+const PASSWORD_HASH_PREFIX = 'v2:';
 
 type PasswordUserRow = {
   id: string;
@@ -57,7 +58,9 @@ export async function getCurrentUser(request?: Request): Promise<CurrentUser | n
       .first<{ id: string; email: string; display_name: string }>();
 
     if (googleRow) {
-      const ownerEmail = env.OWNER_CHATGPT_EMAIL?.trim().toLowerCase();
+      const ownerEmail = (
+        env.OWNER_GOOGLE_EMAIL ?? env.OWNER_CHATGPT_EMAIL
+      )?.trim().toLowerCase();
       return {
         ownerId:
           ownerEmail && googleRow.email.trim().toLowerCase() === ownerEmail
@@ -83,17 +86,19 @@ export function isValidPassword(value: string) {
   return value.length >= 10 && value.length <= 128;
 }
 
+export function isPasswordAuthConfigured() {
+  return Boolean(env.PASSWORD_PEPPER && env.PASSWORD_PEPPER.trim().length >= 32);
+}
+
 export async function createPasswordUser(username: string, password: string) {
   await ensureSchema();
   const normalized = normalizeUsername(username);
-  const existing = await getDatabaseBinding()
-    .prepare('SELECT id FROM password_users WHERE username = ?')
-    .bind(normalized)
-    .first<{ id: string }>();
-  if (existing) return null;
-
   const salt = randomToken(16);
-  const passwordHash = await derivePasswordHash(password, salt);
+  const passwordHash = PASSWORD_HASH_PREFIX + await derivePasswordHash(
+    password,
+    salt,
+    requirePasswordPepper(),
+  );
   const userId = crypto.randomUUID();
 
   try {
@@ -128,10 +133,30 @@ export async function verifyPasswordUser(username: string, password: string) {
     return null;
   }
 
-  const suppliedHash = await derivePasswordHash(password, row.password_salt);
-  return constantTimeEqual(suppliedHash, row.password_hash)
-    ? { id: row.id, displayName: row.display_name }
-    : null;
+  const isPeppered = row.password_hash.startsWith(PASSWORD_HASH_PREFIX);
+  const expectedHash = isPeppered
+    ? row.password_hash.slice(PASSWORD_HASH_PREFIX.length)
+    : row.password_hash;
+  const suppliedHash = await derivePasswordHash(
+    password,
+    row.password_salt,
+    isPeppered ? requirePasswordPepper() : undefined,
+  );
+  if (!constantTimeEqual(suppliedHash, expectedHash)) return null;
+
+  if (!isPeppered) {
+    const upgradedHash = PASSWORD_HASH_PREFIX + await derivePasswordHash(
+      password,
+      row.password_salt,
+      requirePasswordPepper(),
+    );
+    await getDatabaseBinding()
+      .prepare('UPDATE password_users SET password_hash = ? WHERE id = ?')
+      .bind(upgradedHash, row.id)
+      .run();
+  }
+
+  return { id: row.id, displayName: row.display_name };
 }
 
 export async function createPasswordSession(userId: string, secure: boolean) {
@@ -217,10 +242,13 @@ function readCookie(header: string | null, name: string) {
   return null;
 }
 
-async function derivePasswordHash(password: string, salt: string) {
+async function derivePasswordHash(password: string, salt: string, pepper?: string) {
+  const passwordBytes = pepper
+    ? await hmacSha256(pepper, password)
+    : new TextEncoder().encode(password);
   const key = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(password),
+    passwordBytes,
     'PBKDF2',
     false,
     ['deriveBits'],
@@ -236,6 +264,30 @@ async function derivePasswordHash(password: string, salt: string) {
     256,
   );
   return base64UrlEncode(new Uint8Array(bits));
+}
+
+async function hmacSha256(secret: string, value: string) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(value),
+  );
+  return new Uint8Array(signature);
+}
+
+function requirePasswordPepper() {
+  const pepper = env.PASSWORD_PEPPER?.trim();
+  if (!pepper || pepper.length < 32) {
+    throw new Error('PASSWORD_PEPPER must contain at least 32 characters.');
+  }
+  return pepper;
 }
 
 async function sha256(value: string) {

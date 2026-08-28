@@ -1,12 +1,24 @@
 import {
   createPasswordSession,
   createPasswordUser,
+  isPasswordAuthConfigured,
   isValidPassword,
   isValidUsername,
   normalizeUsername,
-} from '../../../auth';
+} from '../../../lib/auth';
+import { consumeRateLimit, rateLimited } from '../../../lib/rate-limit';
 
 export async function POST(request: Request) {
+  if (!isPasswordAuthConfigured()) return unavailable();
+  const limit = await consumeRateLimit(
+    request,
+    'register-ip',
+    '',
+    10,
+    60 * 60 * 1000,
+  );
+  if (!limit.allowed) return rateLimited(limit.retryAfter);
+
   const credentials = await parseCredentials(request);
   if (!credentials) return invalidCredentials();
 
@@ -45,4 +57,8 @@ function invalidCredentials() {
     { error: '帳號需為 3–30 個英數字、_ 或 -；密碼至少 10 個字元。' },
     { status: 400 },
   );
+}
+
+function unavailable() {
+  return Response.json({ error: '帳號註冊尚未完成設定。' }, { status: 503 });
 }

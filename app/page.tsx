@@ -1,7 +1,7 @@
-import Daybook from './daybook';
-import AuthScreen from './auth-screen';
-import { getCurrentUser } from './auth';
-import { isGoogleAuthConfigured } from './google-oauth';
+import AuthScreen from './components/auth-screen';
+import Daybook from './components/daybook';
+import { getCurrentUser } from './lib/auth';
+import { isGoogleAuthConfigured } from './lib/google-oauth';
 
 export const dynamic = 'force-dynamic';
 

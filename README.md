@@ -1,16 +1,13 @@
-# 日常｜我的每日行事曆
+# 日常
 
-一個以「一天一頁」為概念的私人網頁行事曆。
+一天一頁的個人行事曆：[calendar.matthiola.dev](https://calendar.matthiola.dev/)
 
-- 依日期新增、完成與刪除待辦事項
-- 自動計算當日完成進度
-- 記錄今天做了哪些事與今日心得
-- 使用雲端 D1 資料庫跨裝置同步
-- 支援 Google 登入與自訂帳號密碼
-- 支援手機與桌面版面
-- 提供受保護的本地 agent 管理指令
+- 待辦、完成進度、活動紀錄與心得
+- Google 或帳號密碼登入
+- D1 雲端同步，支援手機與桌面
+- 本機 agent 指令
 
-## 在本機執行
+## 開發
 
 需要 Node.js 22.13 以上版本。
 
@@ -19,31 +16,22 @@ npm install
 npm run dev
 ```
 
-開啟終端機顯示的網址；本機登入流程會使用 Sites 提供的模擬使用者。
-
-## 資料庫
-
-修改 `db/schema.ts` 後產生遷移：
+複製 `.env.example` 至 `.env.local`。帳號密碼登入需要至少 32 字元的 `PASSWORD_PEPPER`；Google OAuth 為選用功能。請勿提交任何 `.env` 檔案。
 
 ```bash
-npm run db:generate
-```
-
-## 本地 agent 操作
-
-本機的 `.env.local` 保存兩組不會提交至 GitHub 的金鑰。agent 可透過以下指令讀寫正式網站的同一份資料：
-
-```bash
-npm run calendar -- get 2026-08-28
-npm run calendar -- add 2026-08-28 "整理明天的工作"
-npm run calendar -- activity 2026-08-28 "完成網站設定"
-npm run calendar -- reflection 2026-08-28 "今天的進度很踏實"
-```
-
-完整指令請參考 `AGENTS.md`。
-
-## 正式建置
-
-```bash
+npm run lint
 npm run build
+npm run db:generate # 修改 db/schema.ts 後執行
 ```
+
+## 結構
+
+```text
+app/components  介面元件
+app/lib         登入與 OAuth
+app/api         後端路由
+db              D1 schema 與遷移
+scripts         本機 agent 指令
+```
+
+Agent 指令與必要環境變數請見 [`AGENTS.md`](AGENTS.md) 與 [`.env.example`](.env.example)。安全問題請依 [`SECURITY.md`](SECURITY.md) 回報。
