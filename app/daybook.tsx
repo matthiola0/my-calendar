@@ -1,0 +1,374 @@
+'use client';
+
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+
+type Task = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+type DayEntry = {
+  tasks: Task[];
+  activity: string;
+  reflection: string;
+};
+
+type SyncStatus = 'loading' | 'saving' | 'saved' | 'error';
+
+const LEGACY_STORAGE_KEY = 'my-daybook-entries-v1';
+const LEGACY_MIGRATION_KEY = 'my-daybook-cloud-migration-v1';
+const emptyEntry: DayEntry = { tasks: [], activity: '', reflection: '' };
+
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function fromDateKey(key: string) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+function shiftDate(key: string, amount: number) {
+  const date = fromDateKey(key);
+  date.setDate(date.getDate() + amount);
+  return dateKey(date);
+}
+
+async function readEntry(date: string, signal?: AbortSignal): Promise<DayEntry> {
+  const response = await fetch(`/api/entries?date=${encodeURIComponent(date)}`, {
+    cache: 'no-store',
+    signal,
+  });
+  if (!response.ok) throw new Error('Unable to load entry');
+  return response.json();
+}
+
+async function writeEntry(date: string, entry: DayEntry) {
+  const response = await fetch('/api/entries', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, ...entry }),
+  });
+  if (!response.ok) throw new Error('Unable to save entry');
+}
+
+async function migrateLegacyEntries() {
+  if (window.localStorage.getItem(LEGACY_MIGRATION_KEY)) return;
+
+  const saved = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (saved) {
+    const entries = JSON.parse(saved) as Record<string, DayEntry>;
+    for (const [date, entry] of Object.entries(entries)) {
+      await writeEntry(date, entry);
+    }
+  }
+  window.localStorage.setItem(LEGACY_MIGRATION_KEY, new Date().toISOString());
+}
+
+export default function Daybook({ userName }: { userName: string }) {
+  const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
+  const [entries, setEntries] = useState<Record<string, DayEntry>>({});
+  const [taskText, setTaskText] = useState('');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('loading');
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDraftRef = useRef<{ date: string; entry: DayEntry } | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveSequenceRef = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSyncStatus('loading');
+
+    async function load() {
+      try {
+        await migrateLegacyEntries();
+        const entry = await readEntry(selectedDate, controller.signal);
+        if (!controller.signal.aborted) {
+          setEntries((current) => ({ ...current, [selectedDate]: entry }));
+          setSyncStatus('saved');
+        }
+      } catch {
+        if (!controller.signal.aborted) setSyncStatus('error');
+      }
+    }
+
+    load();
+    return () => controller.abort();
+  }, [selectedDate]);
+
+  useEffect(
+    () => () => {
+      if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+    },
+    [],
+  );
+
+  const entry = entries[selectedDate] ?? emptyEntry;
+  const selected = fromDateKey(selectedDate);
+  const todayKey = dateKey(new Date());
+  const isToday = selectedDate === todayKey;
+  const completed = entry.tasks.filter((task) => task.done).length;
+  const progress = entry.tasks.length
+    ? Math.round((completed / entry.tasks.length) * 100)
+    : 0;
+  const isReady = syncStatus !== 'loading';
+
+  const week = useMemo(
+    () => Array.from({ length: 7 }, (_, index) => shiftDate(selectedDate, index - 3)),
+    [selectedDate],
+  );
+
+  const flushPendingSave = () => {
+    if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+    pendingTimerRef.current = null;
+    const draft = pendingDraftRef.current;
+    pendingDraftRef.current = null;
+    if (!draft) return;
+
+    const sequence = ++saveSequenceRef.current;
+    setSyncStatus('saving');
+    saveQueueRef.current = saveQueueRef.current
+      .catch(() => undefined)
+      .then(() => writeEntry(draft.date, draft.entry))
+      .then(() => {
+        if (sequence === saveSequenceRef.current) setSyncStatus('saved');
+      })
+      .catch(() => {
+        if (sequence === saveSequenceRef.current) setSyncStatus('error');
+      });
+  };
+
+  const updateEntry = (
+    update: (current: DayEntry) => DayEntry,
+    saveImmediately = false,
+  ) => {
+    const next = update(entry);
+    setEntries((current) => ({ ...current, [selectedDate]: next }));
+    pendingDraftRef.current = { date: selectedDate, entry: next };
+
+    if (saveImmediately) {
+      flushPendingSave();
+      return;
+    }
+    if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+    pendingTimerRef.current = setTimeout(flushPendingSave, 500);
+  };
+
+  const addTask = (event: FormEvent) => {
+    event.preventDefault();
+    const text = taskText.trim();
+    if (!text) return;
+
+    updateEntry(
+      (current) => ({
+        ...current,
+        tasks: [...current.tasks, { id: crypto.randomUUID(), text, done: false }],
+      }),
+      true,
+    );
+    setTaskText('');
+  };
+
+  const toggleTask = (id: string) => {
+    updateEntry(
+      (current) => ({
+        ...current,
+        tasks: current.tasks.map((task) =>
+          task.id === id ? { ...task, done: !task.done } : task,
+        ),
+      }),
+      true,
+    );
+  };
+
+  const deleteTask = (id: string) => {
+    updateEntry(
+      (current) => ({
+        ...current,
+        tasks: current.tasks.filter((task) => task.id !== id),
+      }),
+      true,
+    );
+  };
+
+  const statusText = {
+    loading: '正在讀取雲端資料…',
+    saving: '正在同步…',
+    saved: '已同步至雲端',
+    error: '同步失敗，請檢查網路',
+  }[syncStatus];
+
+  return (
+    <main className="daybook-shell">
+      <header className="site-header">
+        <a className="brand" href="#top" aria-label="回到今日手帳頂端">
+          <span className="brand-mark" aria-hidden="true">日</span>
+          <span>
+            <strong>日常</strong>
+            <small>DAILY NOTES</small>
+          </span>
+        </a>
+        <div className="header-meta">
+          <div className={syncStatus === 'error' ? 'save-status error' : 'save-status'} role="status">
+            <span className="status-dot" aria-hidden="true" />
+            {statusText}
+          </div>
+          <a className="user-menu" href="/signout-with-chatgpt?return_to=/" title={userName}>
+            {userName} · 登出
+          </a>
+        </div>
+      </header>
+
+      <section className="date-hero" id="top">
+        <div className="date-heading">
+          <p className="eyebrow">{selected.getFullYear()} 年 · 我的每一天</p>
+          <h1>
+            {selected.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' })}
+            <span>{selected.toLocaleDateString('zh-TW', { weekday: 'long' })}</span>
+          </h1>
+        </div>
+
+        <div className="date-actions">
+          <div className="date-nav" aria-label="日期切換">
+            <button type="button" onClick={() => setSelectedDate(shiftDate(selectedDate, -1))} aria-label="前一天">←</button>
+            <label className="date-picker-label">
+              <span>選擇日期</span>
+              <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+            </label>
+            <button type="button" onClick={() => setSelectedDate(shiftDate(selectedDate, 1))} aria-label="後一天">→</button>
+          </div>
+          {!isToday && (
+            <button className="today-button" type="button" onClick={() => setSelectedDate(todayKey)}>
+              回到今天
+            </button>
+          )}
+        </div>
+      </section>
+
+      <nav className="week-strip" aria-label="鄰近日期">
+        {week.map((key) => {
+          const date = fromDateKey(key);
+          const active = key === selectedDate;
+          return (
+            <button
+              className={active ? 'week-day active' : 'week-day'}
+              key={key}
+              type="button"
+              onClick={() => setSelectedDate(key)}
+              aria-current={active ? 'date' : undefined}
+            >
+              <span>{date.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週', '')}</span>
+              <strong>{date.getDate()}</strong>
+              {entries[key]?.tasks.some((task) => task.done) && <i aria-label="這天已有完成事項" />}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="content-grid" aria-busy={!isReady}>
+        <section className="card tasks-card" aria-labelledby="tasks-title">
+          <div className="card-heading">
+            <div>
+              <p className="section-number">01</p>
+              <h2 id="tasks-title">今天要完成</h2>
+            </div>
+            <div className="progress-wrap" aria-label={`已完成 ${progress}%`}>
+              <div className="progress-ring" style={{ '--progress': `${progress * 3.6}deg` } as React.CSSProperties}>
+                <span>{progress}<small>%</small></span>
+              </div>
+              <p>{entry.tasks.length ? `${completed} / ${entry.tasks.length} 完成` : '慢慢開始'}</p>
+            </div>
+          </div>
+
+          <form className="task-form" onSubmit={addTask}>
+            <label className="sr-only" htmlFor="new-task">新增待辦事項</label>
+            <input
+              id="new-task"
+              value={taskText}
+              onChange={(event) => setTaskText(event.target.value)}
+              placeholder="寫下接下來要做的事…"
+              autoComplete="off"
+              disabled={!isReady}
+            />
+            <button type="submit" aria-label="加入待辦" disabled={!isReady}>＋</button>
+          </form>
+
+          <div className="task-list" aria-live="polite">
+            {entry.tasks.length === 0 ? (
+              <div className="empty-state">
+                <span aria-hidden="true">✓</span>
+                <p>{isReady ? '今天還是一張白紙' : '正在打開今天這一頁'}</p>
+                <small>{isReady ? '從一件小事開始，就很好。' : '請稍候片刻。'}</small>
+              </div>
+            ) : (
+              entry.tasks.map((task, index) => (
+                <div className={task.done ? 'task-item done' : 'task-item'} key={task.id}>
+                  <button
+                    className="check-button"
+                    type="button"
+                    onClick={() => toggleTask(task.id)}
+                    aria-label={task.done ? `取消完成：${task.text}` : `標示完成：${task.text}`}
+                    aria-pressed={task.done}
+                    disabled={!isReady}
+                  >
+                    {task.done && '✓'}
+                  </button>
+                  <span className="task-index">{String(index + 1).padStart(2, '0')}</span>
+                  <p>{task.text}</p>
+                  <button className="delete-button" type="button" onClick={() => deleteTask(task.id)} aria-label={`刪除：${task.text}`} disabled={!isReady}>×</button>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <div className="notes-column">
+          <section className="card note-card" aria-labelledby="activity-title">
+            <div className="card-heading compact">
+              <div>
+                <p className="section-number">02</p>
+                <h2 id="activity-title">今天做了什麼</h2>
+              </div>
+              <span className="writing-mark" aria-hidden="true">✦</span>
+            </div>
+            <textarea
+              value={entry.activity}
+              onChange={(event) => updateEntry((current) => ({ ...current, activity: event.target.value }))}
+              onBlur={flushPendingSave}
+              placeholder={'把今天發生的事記下來…\n\n完成了什麼、去了哪裡，或是遇見了誰？'}
+              aria-label="今天做了什麼"
+              disabled={!isReady}
+            />
+          </section>
+
+          <section className="card note-card reflection-card" aria-labelledby="reflection-title">
+            <div className="card-heading compact">
+              <div>
+                <p className="section-number">03</p>
+                <h2 id="reflection-title">今日心得</h2>
+              </div>
+              <span className="writing-mark" aria-hidden="true">〰</span>
+            </div>
+            <textarea
+              value={entry.reflection}
+              onChange={(event) => updateEntry((current) => ({ ...current, reflection: event.target.value }))}
+              onBlur={flushPendingSave}
+              placeholder={'今天有什麼感受？\n留一句話，給明天的自己。'}
+              aria-label="今日心得"
+              disabled={!isReady}
+            />
+          </section>
+        </div>
+      </div>
+
+      <footer>
+        <p>一天一頁，把日子好好收進來。</p>
+        <span>{selectedDate.replaceAll('-', ' · ')}</span>
+      </footer>
+    </main>
+  );
+}

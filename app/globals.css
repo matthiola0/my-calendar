@@ -34,8 +34,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--ink); border-radius: 50%; font-family: var(--font-noto-serif-tc), serif; font-size: 20px; }
 .brand strong { display: block; font-family: var(--font-noto-serif-tc), serif; font-size: 19px; letter-spacing: .16em; }
 .brand small { display: block; margin-top: 2px; color: var(--muted); font-size: 8px; letter-spacing: .24em; }
+.header-meta { display: flex; align-items: center; gap: 18px; }
 .save-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; letter-spacing: .04em; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sage); box-shadow: 0 0 0 4px rgba(85,107,87,.1); }
+.save-status.error { color: #9b4d42; }
+.save-status.error .status-dot { background: #b45d4f; box-shadow: 0 0 0 4px rgba(180,93,79,.1); }
+.user-menu { max-width: 220px; overflow: hidden; color: var(--muted); font-size: 11px; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu:hover { color: var(--ink); }
 
 .date-hero { display: flex; justify-content: space-between; align-items: end; gap: 24px; padding: 52px 2px 32px; }
 .eyebrow, .section-number { margin: 0 0 10px; color: var(--sage); font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
@@ -77,6 +82,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .task-form input::placeholder, textarea::placeholder { color: #a5a59d; }
 .task-form button { width: 52px; border: 0; border-radius: 14px; background: var(--sage); color: #fff; font-size: 24px; cursor: pointer; }
 .task-form button:hover { background: #445847; }
+.task-form input:disabled, .task-form button:disabled, textarea:disabled, .task-item button:disabled { cursor: wait; opacity: .58; }
 .task-list { border-top: 1px solid var(--line); }
 .task-item { min-height: 65px; display: grid; grid-template-columns: 28px 32px 1fr 26px; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); }
 .check-button { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid #babcb2; border-radius: 50%; background: transparent; color: white; font-size: 12px; cursor: pointer; }
@@ -118,7 +124,9 @@ footer p { margin: 0; font-family: var(--font-noto-serif-tc), serif; }
 
 @media (max-width: 520px) {
   .daybook-shell { width: calc(100% - 20px); }
-  .save-status { font-size: 11px; }
+  .header-meta { gap: 8px; }
+  .save-status { font-size: 10px; }
+  .user-menu { max-width: 66px; font-size: 10px; }
   .date-hero { display: block; }
   .date-actions { flex-direction: row; justify-content: space-between; align-items: center; margin-top: 26px; }
   .week-strip { padding: 4px; }
