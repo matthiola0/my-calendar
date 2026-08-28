@@ -39,6 +39,32 @@ export function ensureSchema() {
           ON auth_sessions (expires_at)
         `),
         db.prepare(`
+          CREATE TABLE IF NOT EXISTS google_users (
+            id TEXT PRIMARY KEY NOT NULL,
+            email TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        `),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS google_auth_sessions (
+            token_hash TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES google_users(id) ON DELETE CASCADE
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_google_auth_sessions_user_id
+          ON google_auth_sessions (user_id)
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_google_auth_sessions_expires_at
+          ON google_auth_sessions (expires_at)
+        `),
+        db.prepare(`
           CREATE TABLE IF NOT EXISTS day_entries (
             owner_id TEXT NOT NULL,
             date TEXT NOT NULL,

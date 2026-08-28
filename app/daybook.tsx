@@ -74,7 +74,7 @@ export default function Daybook({
   authType,
 }: {
   userName: string;
-  authType: 'chatgpt' | 'password';
+  authType: 'chatgpt' | 'google' | 'password';
 }) {
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});

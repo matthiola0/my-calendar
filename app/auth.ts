@@ -7,7 +7,7 @@ import { getChatGPTUser } from './chatgpt-auth';
 export type CurrentUser = {
   ownerId: string;
   displayName: string;
-  authType: 'chatgpt' | 'password';
+  authType: 'chatgpt' | 'google' | 'password';
 };
 
 const SESSION_COOKIE = 'calendar_session';
@@ -46,6 +46,28 @@ export async function getCurrentUser(request?: Request): Promise<CurrentUser | n
         ownerId: `password:${row.id}`,
         displayName: row.display_name,
         authType: 'password',
+      };
+    }
+
+    const googleRow = await getDatabaseBinding()
+      .prepare(`
+        SELECT google_users.id, google_users.email, google_users.display_name
+        FROM google_auth_sessions
+        INNER JOIN google_users ON google_users.id = google_auth_sessions.user_id
+        WHERE google_auth_sessions.token_hash = ? AND google_auth_sessions.expires_at > ?
+      `)
+      .bind(tokenHash, Date.now())
+      .first<{ id: string; email: string; display_name: string }>();
+
+    if (googleRow) {
+      const ownerEmail = env.OWNER_CHATGPT_EMAIL?.trim().toLowerCase();
+      return {
+        ownerId:
+          ownerEmail && googleRow.email.trim().toLowerCase() === ownerEmail
+            ? 'owner'
+            : `google:${googleRow.id}`,
+        displayName: googleRow.display_name,
+        authType: 'google',
       };
     }
   }
@@ -147,14 +169,50 @@ export async function createPasswordSession(userId: string, secure: boolean) {
   return sessionCookie(token, SESSION_SECONDS, secure);
 }
 
+export async function createGoogleUserSession(
+  profile: { id: string; email: string; displayName: string },
+  secure: boolean,
+) {
+  await ensureSchema();
+  const token = randomToken(32);
+  const tokenHash = await sha256(token);
+  const now = Date.now();
+  const expiresAt = now + SESSION_SECONDS * 1000;
+  const db = getDatabaseBinding();
+
+  await db.batch([
+    db
+      .prepare(`
+        INSERT INTO google_users (id, email, display_name, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          email = excluded.email,
+          display_name = excluded.display_name,
+          updated_at = excluded.updated_at
+      `)
+      .bind(profile.id, profile.email, profile.displayName, now, now),
+    db.prepare('DELETE FROM google_auth_sessions WHERE expires_at <= ?').bind(now),
+    db
+      .prepare(`
+        INSERT INTO google_auth_sessions (token_hash, user_id, expires_at, created_at)
+        VALUES (?, ?, ?, ?)
+      `)
+      .bind(tokenHash, profile.id, expiresAt, now),
+  ]);
+
+  return sessionCookie(token, SESSION_SECONDS, secure);
+}
+
 export async function deletePasswordSession(request: Request) {
   const token = readCookie(request.headers.get('cookie'), SESSION_COOKIE);
   if (token) {
     await ensureSchema();
-    await getDatabaseBinding()
-      .prepare('DELETE FROM auth_sessions WHERE token_hash = ?')
-      .bind(await sha256(token))
-      .run();
+    const tokenHash = await sha256(token);
+    const db = getDatabaseBinding();
+    await db.batch([
+      db.prepare('DELETE FROM auth_sessions WHERE token_hash = ?').bind(tokenHash),
+      db.prepare('DELETE FROM google_auth_sessions WHERE token_hash = ?').bind(tokenHash),
+    ]);
   }
   return sessionCookie('', 0, new URL(request.url).protocol === 'https:');
 }

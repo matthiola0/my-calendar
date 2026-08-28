@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 type Mode = 'login' | 'register';
 
-export default function AuthScreen() {
+export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }) {
   const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -86,6 +86,13 @@ export default function AuthScreen() {
             使用 ChatGPT 登入
           </a>
 
+          {googleEnabled && (
+            <a className="google-login" href="/api/auth/google">
+              <span aria-hidden="true">G</span>
+              使用 Google 帳號登入
+            </a>
+          )}
+
           <div className="auth-divider"><span>或使用帳號密碼</span></div>
 
           <form className="auth-form" onSubmit={submit}>
@@ -136,7 +143,10 @@ export default function AuthScreen() {
             </button>
           </form>
 
-          <p className="auth-privacy">你的待辦、紀錄與心得不會與其他使用者共用。</p>
+          <p className="auth-privacy">
+            你的待辦、紀錄與心得不會與其他使用者共用。<br />
+            <Link href="/privacy">查看隱私權政策</Link>
+          </p>
         </div>
       </section>
     </main>

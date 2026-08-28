@@ -27,6 +27,28 @@ export const authSessions = sqliteTable(
   ],
 );
 
+export const googleUsers = sqliteTable('google_users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull(),
+  displayName: text('display_name').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const googleAuthSessions = sqliteTable(
+  'google_auth_sessions',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    userId: text('user_id').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_google_auth_sessions_user_id').on(table.userId),
+    index('idx_google_auth_sessions_expires_at').on(table.expiresAt),
+  ],
+);
+
 export const dayEntries = sqliteTable(
   'day_entries',
   {
