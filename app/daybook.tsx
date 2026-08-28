@@ -69,13 +69,7 @@ async function migrateLegacyEntries() {
   window.localStorage.setItem(LEGACY_MIGRATION_KEY, new Date().toISOString());
 }
 
-export default function Daybook({
-  userName,
-  authType,
-}: {
-  userName: string;
-  authType: 'chatgpt' | 'google' | 'password';
-}) {
+export default function Daybook({ userName }: { userName: string }) {
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});
   const [taskText, setTaskText] = useState('');
@@ -230,15 +224,9 @@ export default function Daybook({
             <span className="status-dot" aria-hidden="true" />
             {statusText}
           </div>
-          {authType === 'chatgpt' ? (
-            <a className="user-menu" href="/signout-with-chatgpt?return_to=/" title={userName}>
-              {userName} · 登出
-            </a>
-          ) : (
-            <button className="user-menu" type="button" onClick={signOut} title={userName}>
-              {userName} · 登出
-            </button>
-          )}
+          <button className="user-menu" type="button" onClick={signOut} title={userName}>
+            {userName} · 登出
+          </button>
         </div>
       </header>
 

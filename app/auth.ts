@@ -2,12 +2,10 @@ import { env } from 'cloudflare:workers';
 import { cookies } from 'next/headers';
 import { ensureSchema } from '../db/ensure-schema';
 import { getDatabaseBinding } from '../db';
-import { getChatGPTUser } from './chatgpt-auth';
 
 export type CurrentUser = {
   ownerId: string;
   displayName: string;
-  authType: 'chatgpt' | 'google' | 'password';
 };
 
 const SESSION_COOKIE = 'calendar_session';
@@ -45,7 +43,6 @@ export async function getCurrentUser(request?: Request): Promise<CurrentUser | n
       return {
         ownerId: `password:${row.id}`,
         displayName: row.display_name,
-        authType: 'password',
       };
     }
 
@@ -67,22 +64,11 @@ export async function getCurrentUser(request?: Request): Promise<CurrentUser | n
             ? 'owner'
             : `google:${googleRow.id}`,
         displayName: googleRow.display_name,
-        authType: 'google',
       };
     }
   }
 
-  const chatGPTUser = await getChatGPTUser(request);
-  if (!chatGPTUser) return null;
-
-  const ownerEmail = env.OWNER_CHATGPT_EMAIL?.trim().toLowerCase();
-  const isOriginalOwner = ownerEmail && chatGPTUser.email.trim().toLowerCase() === ownerEmail;
-
-  return {
-    ownerId: isOriginalOwner ? 'owner' : `chatgpt:${chatGPTUser.userId}`,
-    displayName: chatGPTUser.displayName,
-    authType: 'chatgpt',
-  };
+  return null;
 }
 
 export function normalizeUsername(value: string) {
@@ -203,7 +189,7 @@ export async function createGoogleUserSession(
   return sessionCookie(token, SESSION_SECONDS, secure);
 }
 
-export async function deletePasswordSession(request: Request) {
+export async function deleteAppSession(request: Request) {
   const token = readCookie(request.headers.get('cookie'), SESSION_COOKIE);
   if (token) {
     await ensureSchema();

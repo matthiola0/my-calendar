@@ -59,10 +59,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .auth-heading { margin: 34px 0 24px; }
 .auth-heading h2 { margin: 0; font-family: var(--font-noto-serif-tc), serif; font-size: 32px; font-weight: 600; letter-spacing: -.04em; }
 .auth-heading > p:last-child { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
-.chatgpt-login { min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 14px; background: var(--ink); color: white; font-size: 14px; font-weight: 700; text-decoration: none; }
-.chatgpt-login:hover { background: #171916; }
-.chatgpt-login span { color: #d8c392; }
-.google-login { min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none; }
+.google-login { min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none; }
 .google-login:hover { border-color: #b7b5ac; background: #faf8f2; }
 .google-login span { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #4285f4; font-family: Arial, sans-serif; font-size: 16px; font-weight: 800; }
 .auth-divider { display: flex; align-items: center; gap: 14px; margin: 23px 0; color: #9a9a91; font-size: 11px; }

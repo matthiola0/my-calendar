@@ -81,11 +81,6 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
             <p>{mode === 'login' ? '選擇一種方式，繼續寫今天這一頁。' : '註冊後即可在不同裝置同步你的內容。'}</p>
           </div>
 
-          <a className="chatgpt-login" href="/signin-with-chatgpt?return_to=/">
-            <span aria-hidden="true">✦</span>
-            使用 ChatGPT 登入
-          </a>
-
           {googleEnabled && (
             <a className="google-login" href="/api/auth/google">
               <span aria-hidden="true">G</span>
