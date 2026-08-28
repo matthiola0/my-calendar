@@ -7,7 +7,7 @@ const serif = Noto_Serif_TC({ variable: '--font-noto-serif-tc', subsets: ['latin
 const mono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://matthiola.dev'),
+  metadataBase: new URL('https://calendar.matthiola.dev'),
   title: '日常｜我的每日行事曆',
   description: '每天的待辦、生活紀錄與心得，都收在同一頁。',
   openGraph: {
