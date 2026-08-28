@@ -1,9 +1,11 @@
 import Daybook from './daybook';
-import { requireChatGPTUser } from './chatgpt-auth';
+import AuthScreen from './auth-screen';
+import { getCurrentUser } from './auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  const user = await requireChatGPTUser('/');
-  return <Daybook userName={user.displayName} />;
+  const user = await getCurrentUser();
+  if (!user) return <AuthScreen />;
+  return <Daybook userName={user.displayName} authType={user.authType} />;
 }

@@ -8,6 +8,37 @@ export function ensureSchema() {
     schemaPromise = db
       .batch([
         db.prepare(`
+          CREATE TABLE IF NOT EXISTS password_users (
+            id TEXT PRIMARY KEY NOT NULL,
+            username TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            password_salt TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+          )
+        `),
+        db.prepare(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_password_users_username
+          ON password_users (username)
+        `),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS auth_sessions (
+            token_hash TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES password_users(id) ON DELETE CASCADE
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id
+          ON auth_sessions (user_id)
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at
+          ON auth_sessions (expires_at)
+        `),
+        db.prepare(`
           CREATE TABLE IF NOT EXISTS day_entries (
             owner_id TEXT NOT NULL,
             date TEXT NOT NULL,

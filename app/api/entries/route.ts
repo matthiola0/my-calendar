@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { getChatGPTUser } from '../../chatgpt-auth';
+import { getCurrentUser } from '../../auth';
 import { ensureSchema } from '../../../db/ensure-schema';
 import { getDatabaseBinding } from '../../../db';
 
@@ -27,7 +27,8 @@ type TaskRow = {
 };
 
 export async function GET(request: Request) {
-  if (!(await isAuthorized(request))) return unauthorized();
+  const ownerId = await getAuthorizedOwnerId(request);
+  if (!ownerId) return unauthorized();
 
   const date = new URL(request.url).searchParams.get('date');
   if (!date || !isValidDate(date)) return invalidDate();
@@ -38,13 +39,13 @@ export async function GET(request: Request) {
     .prepare(
       'SELECT activity, reflection FROM day_entries WHERE owner_id = ? AND date = ?',
     )
-    .bind(OWNER_ID, date)
+    .bind(ownerId, date)
     .first<{ activity: string; reflection: string }>();
   const taskRows = await db
     .prepare(
       'SELECT id, text, done FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC',
     )
-    .bind(OWNER_ID, date)
+    .bind(ownerId, date)
     .all<TaskRow>();
 
   return Response.json(
@@ -62,7 +63,8 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  if (!(await isAuthorized(request))) return unauthorized();
+  const ownerId = await getAuthorizedOwnerId(request);
+  if (!ownerId) return unauthorized();
 
   let body: unknown;
   try {
@@ -90,15 +92,15 @@ export async function PUT(request: Request) {
           reflection = excluded.reflection,
           updated_at = excluded.updated_at
       `)
-      .bind(OWNER_ID, date, entry.activity, entry.reflection, now),
-    db.prepare('DELETE FROM tasks WHERE owner_id = ? AND date = ?').bind(OWNER_ID, date),
+      .bind(ownerId, date, entry.activity, entry.reflection, now),
+    db.prepare('DELETE FROM tasks WHERE owner_id = ? AND date = ?').bind(ownerId, date),
     ...entry.tasks.map((task, position) =>
       db
         .prepare(`
           INSERT INTO tasks (id, owner_id, date, text, done, position, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `)
-        .bind(task.id, OWNER_ID, date, task.text, task.done ? 1 : 0, position, now, now),
+        .bind(task.id, ownerId, date, task.text, task.done ? 1 : 0, position, now, now),
     ),
   ];
 
@@ -106,7 +108,7 @@ export async function PUT(request: Request) {
   return Response.json({ ok: true, updatedAt: now });
 }
 
-async function isAuthorized(request: Request) {
+async function getAuthorizedOwnerId(request: Request) {
   const authorization = request.headers.get('authorization');
   const suppliedToken = authorization?.startsWith('Bearer ')
     ? authorization.slice(7)
@@ -116,10 +118,10 @@ async function isAuthorized(request: Request) {
     env.AGENT_API_TOKEN &&
     constantTimeEqual(suppliedToken, env.AGENT_API_TOKEN)
   ) {
-    return true;
+    return OWNER_ID;
   }
 
-  return Boolean(await getChatGPTUser());
+  return (await getCurrentUser(request))?.ownerId ?? null;
 }
 
 function parseEntry(body: unknown):

@@ -1,4 +1,31 @@
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+
+export const passwordUsers = sqliteTable(
+  'password_users',
+  {
+    id: text('id').primaryKey(),
+    username: text('username').notNull(),
+    displayName: text('display_name').notNull(),
+    passwordSalt: text('password_salt').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [uniqueIndex('idx_password_users_username').on(table.username)],
+);
+
+export const authSessions = sqliteTable(
+  'auth_sessions',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    userId: text('user_id').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_auth_sessions_user_id').on(table.userId),
+    index('idx_auth_sessions_expires_at').on(table.expiresAt),
+  ],
+);
 
 export const dayEntries = sqliteTable(
   'day_entries',

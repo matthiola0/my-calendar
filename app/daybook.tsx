@@ -69,7 +69,13 @@ async function migrateLegacyEntries() {
   window.localStorage.setItem(LEGACY_MIGRATION_KEY, new Date().toISOString());
 }
 
-export default function Daybook({ userName }: { userName: string }) {
+export default function Daybook({
+  userName,
+  authType,
+}: {
+  userName: string;
+  authType: 'chatgpt' | 'password';
+}) {
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});
   const [taskText, setTaskText] = useState('');
@@ -81,6 +87,8 @@ export default function Daybook({ userName }: { userName: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    // Loading state intentionally follows the externally selected date.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSyncStatus('loading');
 
     async function load() {
@@ -202,6 +210,11 @@ export default function Daybook({ userName }: { userName: string }) {
     error: '同步失敗，請檢查網路',
   }[syncStatus];
 
+  const signOut = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.replace('/');
+  };
+
   return (
     <main className="daybook-shell">
       <header className="site-header">
@@ -217,9 +230,15 @@ export default function Daybook({ userName }: { userName: string }) {
             <span className="status-dot" aria-hidden="true" />
             {statusText}
           </div>
-          <a className="user-menu" href="/signout-with-chatgpt?return_to=/" title={userName}>
-            {userName} · 登出
-          </a>
+          {authType === 'chatgpt' ? (
+            <a className="user-menu" href="/signout-with-chatgpt?return_to=/" title={userName}>
+              {userName} · 登出
+            </a>
+          ) : (
+            <button className="user-menu" type="button" onClick={signOut} title={userName}>
+              {userName} · 登出
+            </button>
+          )}
         </div>
       </header>
 
