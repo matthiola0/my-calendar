@@ -11,4 +11,15 @@ npm run calendar -- activity YYYY-MM-DD "what happened"
 npm run calendar -- reflection YYYY-MM-DD "reflection"
 ```
 
-Read the relevant date before modifying an existing task so you have its ID. Never display, commit, or copy values from `.env.local`. Treat calendar content as private user data.
+For macro-cycle planning:
+
+```bash
+npm run calendar -- cycles
+npm run calendar -- cycle-get CYCLE_ID
+npm run calendar -- cycle-create START_DATE END_DATE "title" "goal"
+npm run calendar -- phase-add CYCLE_ID START_DATE END_DATE "title" "description"
+```
+
+When breaking a macro cycle into daily tasks, read the cycle first, then read every target date before adding tasks. Preserve existing tasks, keep each day realistic, and read the dates again after writing to verify the plan.
+
+Never display, commit, or copy values from `.env.local`. Treat calendar content as private user data.

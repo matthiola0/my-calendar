@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Cycles from './cycles';
 
 type Task = {
   id: string;
@@ -65,6 +66,7 @@ async function writeEntry(date: string, entry: DayEntry) {
 }
 
 export default function Daybook({ userName }: { userName: string }) {
+  const [view, setView] = useState<'daily' | 'cycles'>('daily');
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});
   const [taskText, setTaskText] = useState('');
@@ -240,15 +242,24 @@ export default function Daybook({ userName }: { userName: string }) {
           </span>
         </a>
         <div className="header-meta">
-          <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status">
-            <span className="status-dot" aria-hidden="true" />
-            {statusText}
+          <div className="view-switch" aria-label="週期檢視">
+            <button type="button" className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>小週期 · 每日</button>
+            <button type="button" className={view === 'cycles' ? 'active' : ''} onClick={() => setView('cycles')}>大週期</button>
           </div>
+          {view === 'daily' && (
+            <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status">
+              <span className="status-dot" aria-hidden="true" />
+              {statusText}
+            </div>
+          )}
           <button className="user-menu" type="button" onClick={signOut} title={userName}>
             {userName} · 登出
           </button>
         </div>
       </header>
+
+      {view === 'cycles' ? <Cycles /> : (
+        <>
 
       <section className="date-hero" id="top">
         <div className="date-heading">
@@ -396,6 +407,8 @@ export default function Daybook({ userName }: { userName: string }) {
         <p>一天一頁，把日子好好收進來。</p>
         <span>{selectedDate.replaceAll('-', ' · ')}</span>
       </footer>
+        </>
+      )}
     </main>
   );
 }

@@ -1,11 +1,9 @@
-import { env } from 'cloudflare:workers';
-import { getCurrentUser } from '../../lib/auth';
 import { ensureSchema } from '../../../db/ensure-schema';
 import { getDatabaseBinding } from '../../../db';
+import { getAuthorizedOwnerId } from '../../lib/calendar-auth';
 
 export const dynamic = 'force-dynamic';
 
-const OWNER_ID = 'owner';
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 type Task = {
@@ -154,22 +152,6 @@ export async function PUT(request: Request) {
   return Response.json({ ok: true, revision: nextRevision, updatedAt: now });
 }
 
-async function getAuthorizedOwnerId(request: Request) {
-  const authorization = request.headers.get('authorization');
-  const suppliedToken = authorization?.startsWith('Bearer ')
-    ? authorization.slice(7)
-    : '';
-  if (
-    suppliedToken &&
-    env.AGENT_API_TOKEN &&
-    constantTimeEqual(suppliedToken, env.AGENT_API_TOKEN)
-  ) {
-    return OWNER_ID;
-  }
-
-  return (await getCurrentUser(request))?.ownerId ?? null;
-}
-
 function parseEntry(body: unknown):
   | { ok: true; date: string; entry: DayEntry }
   | { ok: false; error: string } {
@@ -239,15 +221,6 @@ function isValidDate(value: string) {
     parsed.getUTCMonth() === month - 1 &&
     parsed.getUTCDate() === day
   );
-}
-
-function constantTimeEqual(left: string, right: string) {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return difference === 0;
 }
 
 function unauthorized() {

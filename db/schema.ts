@@ -84,6 +84,50 @@ export const tasks = sqliteTable(
   ],
 );
 
+export const cycles = sqliteTable(
+  'cycles',
+  {
+    id: text('id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    title: text('title').notNull(),
+    goal: text('goal').notNull(),
+    startDate: text('start_date').notNull(),
+    endDate: text('end_date').notNull(),
+    status: text('status').notNull().default('active'),
+    revision: text('revision').notNull().default(''),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.id] }),
+    index('idx_cycles_owner_dates').on(table.ownerId, table.startDate, table.endDate),
+  ],
+);
+
+export const cyclePhases = sqliteTable(
+  'cycle_phases',
+  {
+    id: text('id').notNull(),
+    cycleId: text('cycle_id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    startDate: text('start_date').notNull(),
+    endDate: text('end_date').notNull(),
+    position: integer('position').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.id] }),
+    index('idx_cycle_phases_owner_cycle_position').on(
+      table.ownerId,
+      table.cycleId,
+      table.position,
+    ),
+  ],
+);
+
 export const rateLimits = sqliteTable(
   'rate_limits',
   {

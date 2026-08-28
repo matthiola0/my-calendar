@@ -2,7 +2,9 @@
 
 一天一頁的個人行事曆：[calendar.matthiola.dev](https://calendar.matthiola.dev/)
 
-- 待辦、完成進度、活動紀錄與心得
+- 大週期：設定日期範圍、目標與階段
+- 小週期：每日待辦、完成進度、活動紀錄與心得
+- 複製大週期的 AI 拆解指令，交給本機 agent 排入每日待辦
 - Google 或帳號密碼登入
 - D1 雲端同步，支援手機與桌面
 - 本機 agent 指令
@@ -34,4 +36,4 @@ db              D1 schema 與遷移
 scripts         本機 agent 指令
 ```
 
-Agent 指令與必要環境變數請見 [`AGENTS.md`](AGENTS.md) 與 [`.env.example`](.env.example)。安全問題請依 [`SECURITY.md`](SECURITY.md) 回報。
+Agent 會先讀大週期與既有日期，再把階段拆成每日待辦；目前不綁定任何 AI API。指令與必要環境變數請見 [`AGENTS.md`](AGENTS.md) 與 [`.env.example`](.env.example)。安全問題請依 [`SECURITY.md`](SECURITY.md) 回報。

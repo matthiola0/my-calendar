@@ -103,6 +103,44 @@ async function initializeSchema(db: D1Database) {
           ON tasks (owner_id, date, position)
         `),
         db.prepare(`
+          CREATE TABLE IF NOT EXISTS cycles (
+            id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            goal TEXT NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            revision TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, id)
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_cycles_owner_dates
+          ON cycles (owner_id, start_date, end_date)
+        `),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS cycle_phases (
+            id TEXT NOT NULL,
+            cycle_id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, id)
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_cycle_phases_owner_cycle_position
+          ON cycle_phases (owner_id, cycle_id, position)
+        `),
+        db.prepare(`
           CREATE TABLE IF NOT EXISTS rate_limits (
             key TEXT PRIMARY KEY NOT NULL,
             window_start INTEGER NOT NULL,
