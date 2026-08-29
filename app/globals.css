@@ -324,7 +324,7 @@ footer p { margin: 0; font-family: var(--font-noto-serif-tc), serif; }
 .planner-privacy strong { font-size: 10px; }
 .planner-privacy small { margin-top: 3px; color: var(--muted); font-size: 8px; }
 .planner-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 18px; min-height: 690px; }
-.planner-suggestions { padding: 20px 0; }
+.planner-suggestions { min-width: 0; padding: 20px 0; }
 .planner-suggestions > p { margin: 0 0 12px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; }
 .planner-suggestions > div { display: grid; gap: 7px; }
 .planner-suggestions button { display: grid; gap: 4px; width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,253,248,.58); text-align: left; cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
@@ -411,7 +411,7 @@ footer p { margin: 0; font-family: var(--font-noto-serif-tc), serif; }
   .planner-privacy { display: none; }
   .planner-layout { grid-template-columns: 1fr; }
   .planner-suggestions { padding: 0; }
-  .planner-suggestions > div { display: flex; overflow-x: auto; padding-bottom: 5px; }
+  .planner-suggestions > div { max-width: 100%; display: flex; overflow-x: auto; padding-bottom: 5px; }
   .planner-suggestions button { min-width: 145px; }
   .planner-suggestions > small { margin-top: 8px; }
   .planner-chat-card { height: 650px; }
