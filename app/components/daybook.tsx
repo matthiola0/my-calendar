@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Cycles from './cycles';
+import PlannerChat from './planner-chat';
 
 type Task = {
   id: string;
@@ -118,7 +119,8 @@ async function readCustomFields(date: string, signal?: AbortSignal): Promise<Cus
 
 export default function Daybook({ userName }: { userName: string }) {
   const initialDate = dateKey(new Date());
-  const [view, setView] = useState<'daily' | 'cycles'>('daily');
+  const [view, setView] = useState<'daily' | 'cycles' | 'planner'>('daily');
+  const [dataVersion, setDataVersion] = useState(0);
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});
   const [taskText, setTaskText] = useState('');
@@ -165,7 +167,7 @@ export default function Daybook({ userName }: { userName: string }) {
       })
       .catch(() => { if (!controller.signal.aborted) setSyncStatus('error'); });
     return () => controller.abort();
-  }, [selectedDate]);
+  }, [selectedDate, dataVersion]);
 
   useEffect(() => {
     if (view !== 'daily') return;
@@ -181,7 +183,7 @@ export default function Daybook({ userName }: { userName: string }) {
       })
       .catch(() => undefined);
     return () => { active = false; };
-  }, [view]);
+  }, [view, dataVersion]);
 
   const entry = entries[selectedDate] ?? emptyEntry;
   const selected = fromDateKey(selectedDate);
@@ -482,6 +484,11 @@ export default function Daybook({ userName }: { userName: string }) {
   };
 
   const showCycles = () => { void flushPendingSave().then(() => setView('cycles')); };
+  const showPlanner = () => { void flushPendingSave().then(() => setView('planner')); };
+  const handlePlannerApplied = (firstDate: string | null) => {
+    if (firstDate) setSelectedDate(firstDate);
+    setDataVersion((current) => current + 1);
+  };
 
   const renderTask = (task: Task, index: number) => (
     <div className={task.done ? 'task-item done' : 'task-item'} key={task.id} draggable={isReady && editingTask?.id !== task.id} onDragStart={() => setDraggingTaskId(task.id)} onDragEnd={() => setDraggingTaskId(null)}>
@@ -530,13 +537,15 @@ export default function Daybook({ userName }: { userName: string }) {
       <header className="site-header">
         <a className="brand" href="#top" aria-label="回到今日手帳頂端"><span className="brand-mark" aria-hidden="true">日</span><span><strong>日常</strong><small>DAILY NOTES</small></span></a>
         <div className="header-meta">
-          <div className="view-switch" aria-label="週期檢視"><button type="button" className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>小週期 · 每日</button><button type="button" className={view === 'cycles' ? 'active' : ''} onClick={showCycles}>大週期</button></div>
+          <div className="view-switch" aria-label="行事曆檢視"><button type="button" className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>小週期 · 每日</button><button type="button" className={view === 'cycles' ? 'active' : ''} onClick={showCycles}>大週期</button><button type="button" className={view === 'planner' ? 'active' : ''} onClick={showPlanner}>AI 規劃</button></div>
           {view === 'daily' && <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status"><span className="status-dot" aria-hidden="true" />{statusText}</div>}
           <button className="user-menu" type="button" onClick={signOut} title={userName}>{userName} · 登出</button>
         </div>
       </header>
 
-      {view === 'cycles' ? <Cycles /> : (
+      {view === 'cycles' ? <Cycles key={dataVersion} /> : view === 'planner' ? (
+        <PlannerChat selectedDate={selectedDate} onApplied={handlePlannerApplied} />
+      ) : (
         <>
           <section className="date-hero" id="top">
             <div className="date-heading"><p className="eyebrow">{selected.getFullYear()} 年 · 我的每一天</p><h1>{selected.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' })}<span>{selected.toLocaleDateString('zh-TW', { weekday: 'long' })}</span></h1></div>

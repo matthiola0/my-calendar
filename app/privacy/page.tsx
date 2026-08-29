@@ -20,7 +20,7 @@ export default function PrivacyPage() {
 
         <p className="eyebrow">PRIVACY POLICY</p>
         <h1>隱私權政策</h1>
-        <p className="legal-updated">最後更新：2026 年 8 月 28 日</p>
+        <p className="legal-updated">最後更新：2026 年 8 月 29 日</p>
 
         <section>
           <h2>我們收集哪些資料</h2>
@@ -53,6 +53,15 @@ export default function PrivacyPage() {
           <p>
             資料儲存在網站的受管資料庫中，並由提供網站執行、資料儲存與登入所需的基礎設施服務商處理。
             我們不出售個人資料，也不將行事曆內容用於廣告。
+          </p>
+        </section>
+
+        <section>
+          <h2>AI 規劃功能</h2>
+          <p>
+            當你主動使用 AI 規劃時，系統會將對話，以及完成該次規劃所需日期內的任務、
+            大週期、階段與每日分段傳送給 Groq 處理。對話不會由日常永久保存，AI 提案也必須經你確認才會寫入行事曆。
+            請避免輸入與規劃無關的敏感資料；Groq 如何處理推論資料，依其最新資料政策為準。
           </p>
         </section>
 

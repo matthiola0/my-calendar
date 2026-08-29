@@ -9,5 +9,7 @@ declare namespace Cloudflare {
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
     GOOGLE_REDIRECT_URI?: string;
+    GROQ_API_KEY?: string;
+    LLM_MODEL?: string;
   }
 }
