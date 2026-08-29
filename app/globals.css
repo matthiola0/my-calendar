@@ -141,8 +141,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .check-button { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid #babcb2; border-radius: 50%; background: transparent; color: white; font-size: 12px; cursor: pointer; }
 .task-item.done .check-button { border-color: var(--sage); background: var(--sage); }
 .task-index { color: #a8a79f; font-family: var(--font-geist-mono), monospace; font-size: 10px; }
-.task-item p { margin: 0; font-size: 15px; line-height: 1.5; }
-.task-item.done p { color: #a2a198; text-decoration: line-through; }
+.task-text-button { min-width: 0; padding: 7px 5px; border: 0; border-radius: 8px; background: transparent; color: inherit; font-size: 15px; line-height: 1.5; text-align: left; cursor: text; }
+.task-text-button:hover { background: #f5f2ea; }
+.task-item.done .task-text-button { color: #a2a198; text-decoration: line-through; }
 .task-actions { display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
 .edit-button, .delete-button { width: 28px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #aaa9a0; opacity: 0; cursor: pointer; transition: opacity .15s, background .15s; }
 .edit-button { font-size: 11px; font-weight: 700; }

@@ -391,7 +391,16 @@ export default function Daybook({ userName }: { userName: string }) {
                     </form>
                   ) : (
                     <>
-                      <p>{task.text}</p>
+                      <button
+                        className="task-text-button"
+                        type="button"
+                        onClick={() => setEditingTask({ id: task.id, text: task.text })}
+                        aria-label={`編輯待辦：${task.text}`}
+                        title="點擊編輯"
+                        disabled={!isReady}
+                      >
+                        {task.text}
+                      </button>
                       <div className="task-actions">
                         <button className="edit-button" type="button" onClick={() => setEditingTask({ id: task.id, text: task.text })} aria-label={`編輯：${task.text}`} disabled={!isReady}>編</button>
                         <button className="delete-button" type="button" onClick={() => deleteTask(task.id)} aria-label={`刪除：${task.text}`} disabled={!isReady}>×</button>
