@@ -25,9 +25,49 @@ switch (command) {
     const entry = await getEntry(date);
     const text = values.join(' ').trim();
     if (!text) fail('Usage: npm run calendar -- add YYYY-MM-DD "task"');
-    entry.tasks.push({ id: randomUUID(), text, done: false, cycleId: null, phaseId: null });
+    entry.tasks.push({
+      id: randomUUID(),
+      text,
+      done: false,
+      cycleId: null,
+      phaseId: null,
+      sectionId: null,
+      recurrenceId: null,
+      habitCue: null,
+      tinyStart: null,
+    });
     await saveEntry(date, entry);
     console.log(`Added task to ${date}: ${text}`);
+    break;
+  }
+  case 'repeat': {
+    const [date, text, unit, intervalValue, endMode, endValue] = args;
+    const interval = Number(intervalValue);
+    if (
+      !date || !text ||
+      !['day', 'week', 'month'].includes(unit) ||
+      !Number.isInteger(interval) || interval < 1 ||
+      !['count', 'date'].includes(endMode) || !endValue
+    ) {
+      fail('Usage: npm run calendar -- repeat YYYY-MM-DD "task" day|week|month INTERVAL count|date COUNT|END_DATE');
+    }
+    const recurrence = endMode === 'count'
+      ? { unit, interval, endMode, count: Number(endValue) }
+      : { unit, interval, endMode, until: endValue };
+    const result = await request('/api/recurring-tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        startDate: date,
+        text,
+        cycleId: null,
+        phaseId: null,
+        sectionId: null,
+        habitCue: null,
+        tinyStart: null,
+        recurrence,
+      }),
+    });
+    console.log(`Created ${result.count} recurring tasks starting ${date}.`);
     break;
   }
   case 'toggle': {
@@ -81,6 +121,33 @@ switch (command) {
     task.phaseId = null;
     await saveEntry(date, entry);
     console.log(`Unlinked: ${task.text}`);
+    break;
+  }
+  case 'move': {
+    const [date, taskId, sectionId] = args;
+    if (!date || !taskId || !sectionId) fail('Usage: npm run calendar -- move YYYY-MM-DD TASK_ID SECTION_ID|none');
+    const entry = await getEntry(date);
+    const task = entry.tasks.find((item) => item.id === taskId);
+    if (!task) fail(`Task not found: ${taskId}`);
+    if (sectionId !== 'none') {
+      const sections = await getSections();
+      if (!sections.some((section) => section.id === sectionId)) fail(`Section not found: ${sectionId}`);
+    }
+    task.sectionId = sectionId === 'none' ? null : sectionId;
+    await saveEntry(date, entry);
+    console.log(`Moved: ${task.text}`);
+    break;
+  }
+  case 'habit': {
+    const [date, taskId, cue = '', tinyStart = ''] = args;
+    if (!date || !taskId) fail('Usage: npm run calendar -- habit YYYY-MM-DD TASK_ID "cue" "two-minute start"');
+    const entry = await getEntry(date);
+    const task = entry.tasks.find((item) => item.id === taskId);
+    if (!task) fail(`Task not found: ${taskId}`);
+    task.habitCue = cue.trim() || null;
+    task.tinyStart = tinyStart.trim() || null;
+    await saveEntry(date, entry);
+    console.log(`Updated habit design for: ${task.text}`);
     break;
   }
   case 'activity': {
@@ -163,6 +230,49 @@ switch (command) {
     console.log(`Updated reward for ${cycle.title}.`);
     break;
   }
+  case 'sections': {
+    console.log(JSON.stringify(await getSections(), null, 2));
+    break;
+  }
+  case 'sections-set': {
+    const titles = args.map((value) => value.trim()).filter(Boolean);
+    if (titles.length > 6) fail('Daily sections are limited to 6.');
+    const current = await getSections();
+    const sections = titles.map((title, index) => ({ id: current[index]?.id ?? randomUUID(), title }));
+    await request('/api/day-sections', {
+      method: 'PUT',
+      body: JSON.stringify({ sections }),
+    });
+    console.log(`Saved ${sections.length} daily sections.`);
+    break;
+  }
+  case 'fields': {
+    const [date] = args;
+    if (!date) fail('Usage: npm run calendar -- fields YYYY-MM-DD');
+    const result = await request(`/api/custom-fields?date=${encodeURIComponent(date)}`);
+    console.log(JSON.stringify(result.fields, null, 2));
+    break;
+  }
+  case 'field-add': {
+    const title = args.join(' ').trim();
+    if (!title) fail('Usage: npm run calendar -- field-add "title"');
+    const result = await request('/api/custom-fields', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    });
+    console.log(`Created field ${result.field.id}: ${result.field.title}`);
+    break;
+  }
+  case 'field-write': {
+    const [date, fieldId, ...values] = args;
+    if (!date || !fieldId) fail('Usage: npm run calendar -- field-write YYYY-MM-DD FIELD_ID "content"');
+    await request('/api/custom-fields', {
+      method: 'PUT',
+      body: JSON.stringify({ id: fieldId, date, content: values.join(' ') }),
+    });
+    console.log(`Updated custom field for ${date}.`);
+    break;
+  }
   default:
     printHelp();
 }
@@ -181,6 +291,11 @@ async function saveEntry(targetDate, entryValue) {
 async function getCycles() {
   const result = await request('/api/cycles');
   return result.cycles;
+}
+
+async function getSections() {
+  const result = await request('/api/day-sections');
+  return result.sections;
 }
 
 async function saveCycle(cycle) {
@@ -212,10 +327,13 @@ function printHelp() {
   console.log(`Calendar agent commands:
   get        YYYY-MM-DD
   add        YYYY-MM-DD "task"
+  repeat     YYYY-MM-DD "task" day|week|month INTERVAL count|date COUNT|END_DATE
   toggle     YYYY-MM-DD TASK_ID
   remove     YYYY-MM-DD TASK_ID
   link       YYYY-MM-DD TASK_ID CYCLE_ID [PHASE_ID]
   unlink     YYYY-MM-DD TASK_ID
+  move       YYYY-MM-DD TASK_ID SECTION_ID|none
+  habit      YYYY-MM-DD TASK_ID "cue" "two-minute start"
   activity   YYYY-MM-DD "what happened"
   reflection YYYY-MM-DD "reflection"`);
   console.log(`
@@ -225,6 +343,13 @@ Macro-cycle commands:
   cycle-create START_DATE END_DATE "title" "goal"
   phase-add   CYCLE_ID START_DATE END_DATE "title" "description"
   cycle-reward CYCLE_ID "reward"`);
+  console.log(`
+Daily layout and custom records:
+  sections
+  sections-set "morning" "afternoon" "evening"
+  fields       YYYY-MM-DD
+  field-add    "title"
+  field-write  YYYY-MM-DD FIELD_ID "content"`);
   process.exit(1);
 }
 

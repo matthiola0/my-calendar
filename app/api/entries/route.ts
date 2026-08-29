@@ -12,6 +12,10 @@ type Task = {
   done: boolean;
   cycleId: string | null;
   phaseId: string | null;
+  sectionId: string | null;
+  recurrenceId: string | null;
+  habitCue: string | null;
+  tinyStart: string | null;
 };
 
 type DayEntry = {
@@ -27,6 +31,10 @@ type TaskRow = {
   done: number;
   cycleId: string | null;
   phaseId: string | null;
+  sectionId: string | null;
+  recurrenceId: string | null;
+  habitCue: string | null;
+  tinyStart: string | null;
 };
 
 export async function GET(request: Request) {
@@ -46,7 +54,9 @@ export async function GET(request: Request) {
     .first<{ activity: string; reflection: string; revision: string }>();
   const taskRows = await db
     .prepare(
-      `SELECT id, text, done, cycle_id AS cycleId, phase_id AS phaseId
+      `SELECT id, text, done, cycle_id AS cycleId, phase_id AS phaseId,
+        section_id AS sectionId, recurrence_id AS recurrenceId,
+        habit_cue AS habitCue, tiny_start AS tinyStart
        FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC`,
     )
     .bind(ownerId, date)
@@ -60,6 +70,10 @@ export async function GET(request: Request) {
         done: Boolean(task.done),
         cycleId: task.cycleId,
         phaseId: task.phaseId,
+        sectionId: task.sectionId,
+        recurrenceId: task.recurrenceId,
+        habitCue: task.habitCue,
+        tinyStart: task.tinyStart,
       })),
       activity: day?.activity ?? '',
       reflection: day?.reflection ?? '',
@@ -88,8 +102,8 @@ export async function PUT(request: Request) {
   const { date, entry } = parsed;
   await ensureSchema();
   const db = getDatabaseBinding();
-  if (!(await taskLinksAreValid(db, ownerId, entry.tasks))) {
-    return Response.json({ error: '綁定的大週期或階段不存在。' }, { status: 400 });
+  if (!(await taskReferencesAreValid(db, ownerId, entry.tasks))) {
+    return Response.json({ error: '綁定的大週期、階段或每日分段不存在。' }, { status: 400 });
   }
   const now = Date.now();
   const nextRevision = crypto.randomUUID();
@@ -135,8 +149,9 @@ export async function PUT(request: Request) {
       db
         .prepare(`
           INSERT INTO tasks
-            (id, owner_id, date, text, done, cycle_id, phase_id, position, created_at, updated_at)
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
+             recurrence_id, habit_cue, tiny_start, position, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE EXISTS (
             SELECT 1 FROM day_entries
             WHERE owner_id = ? AND date = ? AND revision = ?
@@ -150,6 +165,10 @@ export async function PUT(request: Request) {
           task.done ? 1 : 0,
           task.cycleId,
           task.phaseId,
+          task.sectionId,
+          task.recurrenceId,
+          task.habitCue,
+          task.tinyStart,
           position,
           now,
           now,
@@ -199,6 +218,10 @@ function parseEntry(body: unknown):
     const task = rawTask as Record<string, unknown>;
     const cycleId = task.cycleId === undefined ? null : task.cycleId;
     const phaseId = task.phaseId === undefined ? null : task.phaseId;
+    const sectionId = task.sectionId === undefined ? null : task.sectionId;
+    const recurrenceId = task.recurrenceId === undefined ? null : task.recurrenceId;
+    const habitCue = task.habitCue === undefined ? null : task.habitCue;
+    const tinyStart = task.tinyStart === undefined ? null : task.tinyStart;
     if (
       typeof task.id !== 'string' ||
       task.id.length < 1 ||
@@ -210,7 +233,11 @@ function parseEntry(body: unknown):
       typeof task.done !== 'boolean' ||
       (cycleId !== null && (typeof cycleId !== 'string' || cycleId.length < 1 || cycleId.length > 100)) ||
       (phaseId !== null && (typeof phaseId !== 'string' || phaseId.length < 1 || phaseId.length > 100)) ||
-      (phaseId !== null && cycleId === null)
+      (phaseId !== null && cycleId === null) ||
+      (sectionId !== null && (typeof sectionId !== 'string' || sectionId.length < 1 || sectionId.length > 100)) ||
+      (recurrenceId !== null && (typeof recurrenceId !== 'string' || recurrenceId.length < 1 || recurrenceId.length > 100)) ||
+      (habitCue !== null && (typeof habitCue !== 'string' || habitCue.length > 300)) ||
+      (tinyStart !== null && (typeof tinyStart !== 'string' || tinyStart.length > 300))
     ) {
       return { ok: false, error: '待辦項目內容不正確。' };
     }
@@ -221,6 +248,10 @@ function parseEntry(body: unknown):
       done: task.done,
       cycleId,
       phaseId,
+      sectionId,
+      recurrenceId,
+      habitCue: typeof habitCue === 'string' && habitCue.trim() ? habitCue.trim() : null,
+      tinyStart: typeof tinyStart === 'string' && tinyStart.trim() ? tinyStart.trim() : null,
     });
   }
 
@@ -236,23 +267,23 @@ function parseEntry(body: unknown):
   };
 }
 
-async function taskLinksAreValid(db: D1Database, ownerId: string, tasks: Task[]) {
-  const linkedTasks = tasks.filter((task) => task.cycleId !== null);
-  if (linkedTasks.length === 0) return true;
-
-  const [cycleRows, phaseRows] = await Promise.all([
+async function taskReferencesAreValid(db: D1Database, ownerId: string, tasks: Task[]) {
+  const [cycleRows, phaseRows, sectionRows] = await Promise.all([
     db.prepare('SELECT id FROM cycles WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
     db
       .prepare('SELECT id, cycle_id AS cycleId FROM cycle_phases WHERE owner_id = ?')
       .bind(ownerId)
       .all<{ id: string; cycleId: string }>(),
+    db.prepare('SELECT id FROM day_sections WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
   ]);
   const cycleIds = new Set(cycleRows.results.map((cycle) => cycle.id));
   const phaseCycles = new Map(phaseRows.results.map((phase) => [phase.id, phase.cycleId]));
+  const sectionIds = new Set(sectionRows.results.map((section) => section.id));
 
-  return linkedTasks.every((task) =>
-    cycleIds.has(task.cycleId as string) &&
-    (task.phaseId === null || phaseCycles.get(task.phaseId) === task.cycleId),
+  return tasks.every((task) =>
+    (task.cycleId === null || cycleIds.has(task.cycleId)) &&
+    (task.phaseId === null || phaseCycles.get(task.phaseId) === task.cycleId) &&
+    (task.sectionId === null || sectionIds.has(task.sectionId)),
   );
 }
 

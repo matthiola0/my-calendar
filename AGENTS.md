@@ -5,10 +5,13 @@ When the user asks to read or change calendar data, use the project CLI rather t
 ```bash
 npm run calendar -- get YYYY-MM-DD
 npm run calendar -- add YYYY-MM-DD "task"
+npm run calendar -- repeat YYYY-MM-DD "task" day|week|month INTERVAL count|date COUNT|END_DATE
 npm run calendar -- toggle YYYY-MM-DD TASK_ID
 npm run calendar -- remove YYYY-MM-DD TASK_ID
 npm run calendar -- link YYYY-MM-DD TASK_ID CYCLE_ID [PHASE_ID]
 npm run calendar -- unlink YYYY-MM-DD TASK_ID
+npm run calendar -- move YYYY-MM-DD TASK_ID SECTION_ID|none
+npm run calendar -- habit YYYY-MM-DD TASK_ID "cue" "two-minute start"
 npm run calendar -- activity YYYY-MM-DD "what happened"
 npm run calendar -- reflection YYYY-MM-DD "reflection"
 ```
@@ -23,6 +26,16 @@ npm run calendar -- phase-add CYCLE_ID START_DATE END_DATE "title" "description"
 npm run calendar -- cycle-reward CYCLE_ID "reward"
 ```
 
-When breaking a macro cycle into daily tasks, read the cycle first, then read every target date before adding tasks. Preserve existing tasks, keep each day realistic, link new tasks to the cycle or phase, and read the dates again after writing to verify the plan.
+For daily sections and custom records:
+
+```bash
+npm run calendar -- sections
+npm run calendar -- sections-set "morning" "afternoon" "evening"
+npm run calendar -- fields YYYY-MM-DD
+npm run calendar -- field-add "title"
+npm run calendar -- field-write YYYY-MM-DD FIELD_ID "content"
+```
+
+When breaking a macro cycle into daily tasks, read the cycle and daily sections first, then read every target date before adding tasks. Preserve existing tasks, keep each day realistic, link and place new tasks when appropriate, and read the dates again after writing to verify the plan.
 
 Never display, commit, or copy values from `.env.local`. Treat calendar content as private user data.

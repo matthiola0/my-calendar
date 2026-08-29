@@ -43,6 +43,13 @@
       "when": 1787986735133,
       "tag": "0005_true_amazoness",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787988557123,
+      "tag": "0006_cynical_iron_monger",
+      "breakpoints": true
     }
   ]
 }

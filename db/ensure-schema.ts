@@ -94,6 +94,10 @@ async function initializeSchema(db: D1Database) {
             done INTEGER NOT NULL DEFAULT 0,
             cycle_id TEXT,
             phase_id TEXT,
+            section_id TEXT,
+            recurrence_id TEXT,
+            habit_cue TEXT,
+            tiny_start TEXT,
             position INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
@@ -103,6 +107,50 @@ async function initializeSchema(db: D1Database) {
         db.prepare(`
           CREATE INDEX IF NOT EXISTS idx_tasks_owner_date_position
           ON tasks (owner_id, date, position)
+        `),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS day_sections (
+            id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, id)
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_day_sections_owner_position
+          ON day_sections (owner_id, position)
+        `),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS custom_fields (
+            id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, id)
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_custom_fields_owner_position
+          ON custom_fields (owner_id, position)
+        `),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS custom_field_entries (
+            owner_id TEXT NOT NULL,
+            field_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            content TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, field_id, date)
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_custom_field_entries_owner_date
+          ON custom_field_entries (owner_id, date)
         `),
         db.prepare(`
           CREATE TABLE IF NOT EXISTS cycles (
@@ -175,6 +223,18 @@ async function initializeSchema(db: D1Database) {
   if (!taskColumns.results.some((column) => column.name === 'phase_id')) {
     await db.prepare('ALTER TABLE tasks ADD COLUMN phase_id TEXT').run();
   }
+  if (!taskColumns.results.some((column) => column.name === 'section_id')) {
+    await db.prepare('ALTER TABLE tasks ADD COLUMN section_id TEXT').run();
+  }
+  if (!taskColumns.results.some((column) => column.name === 'recurrence_id')) {
+    await db.prepare('ALTER TABLE tasks ADD COLUMN recurrence_id TEXT').run();
+  }
+  if (!taskColumns.results.some((column) => column.name === 'habit_cue')) {
+    await db.prepare('ALTER TABLE tasks ADD COLUMN habit_cue TEXT').run();
+  }
+  if (!taskColumns.results.some((column) => column.name === 'tiny_start')) {
+    await db.prepare('ALTER TABLE tasks ADD COLUMN tiny_start TEXT').run();
+  }
 
   const cycleColumns = await db
     .prepare('PRAGMA table_info(cycles)')
@@ -204,6 +264,10 @@ async function initializeSchema(db: D1Database) {
           done INTEGER NOT NULL DEFAULT 0,
           cycle_id TEXT,
           phase_id TEXT,
+          section_id TEXT,
+          recurrence_id TEXT,
+          habit_cue TEXT,
+          tiny_start TEXT,
           position INTEGER NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
@@ -212,8 +276,10 @@ async function initializeSchema(db: D1Database) {
       `),
       db.prepare(`
         INSERT INTO tasks_owner_scoped
-          (id, owner_id, date, text, done, cycle_id, phase_id, position, created_at, updated_at)
-        SELECT id, owner_id, date, text, done, cycle_id, phase_id, position, created_at, updated_at
+          (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
+           recurrence_id, habit_cue, tiny_start, position, created_at, updated_at)
+        SELECT id, owner_id, date, text, done, cycle_id, phase_id, section_id,
+          recurrence_id, habit_cue, tiny_start, position, created_at, updated_at
         FROM tasks
       `),
       db.prepare('DROP TABLE tasks'),
@@ -229,6 +295,13 @@ async function initializeSchema(db: D1Database) {
     .prepare(`
       CREATE INDEX IF NOT EXISTS idx_tasks_owner_cycle_done
       ON tasks (owner_id, cycle_id, done)
+    `)
+    .run();
+
+  await db
+    .prepare(`
+      CREATE INDEX IF NOT EXISTS idx_tasks_owner_recurrence_date
+      ON tasks (owner_id, recurrence_id, date)
     `)
     .run();
 

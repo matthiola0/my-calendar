@@ -72,6 +72,10 @@ export const tasks = sqliteTable(
     done: integer('done', { mode: 'boolean' }).notNull().default(false),
     cycleId: text('cycle_id'),
     phaseId: text('phase_id'),
+    sectionId: text('section_id'),
+    recurrenceId: text('recurrence_id'),
+    habitCue: text('habit_cue'),
+    tinyStart: text('tiny_start'),
     position: integer('position').notNull(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
@@ -88,6 +92,58 @@ export const tasks = sqliteTable(
       table.cycleId,
       table.done,
     ),
+    index('idx_tasks_owner_recurrence_date').on(
+      table.ownerId,
+      table.recurrenceId,
+      table.date,
+    ),
+  ],
+);
+
+export const daySections = sqliteTable(
+  'day_sections',
+  {
+    id: text('id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    title: text('title').notNull(),
+    position: integer('position').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.id] }),
+    index('idx_day_sections_owner_position').on(table.ownerId, table.position),
+  ],
+);
+
+export const customFields = sqliteTable(
+  'custom_fields',
+  {
+    id: text('id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    title: text('title').notNull(),
+    position: integer('position').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.id] }),
+    index('idx_custom_fields_owner_position').on(table.ownerId, table.position),
+  ],
+);
+
+export const customFieldEntries = sqliteTable(
+  'custom_field_entries',
+  {
+    ownerId: text('owner_id').notNull(),
+    fieldId: text('field_id').notNull(),
+    date: text('date').notNull(),
+    content: text('content').notNull().default(''),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.fieldId, table.date] }),
+    index('idx_custom_field_entries_owner_date').on(table.ownerId, table.date),
   ],
 );
 
