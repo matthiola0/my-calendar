@@ -547,7 +547,7 @@ export default function Daybook({ userName }: { userName: string }) {
         <div className="header-meta">
           <div className="view-switch" aria-label={t('navLabel')}><button type="button" className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>{t('navDaily')}</button><button type="button" className={view === 'cycles' ? 'active' : ''} onClick={showCycles}>{t('navCycles')}</button><button type="button" className={view === 'planner' ? 'active' : ''} onClick={showPlanner}>{t('navPlanner')}</button></div>
           {view === 'daily' && <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status"><span className="status-dot" aria-hidden="true" />{statusText}</div>}
-          <button className="user-menu" type="button" onClick={signOut} title={userName}>{userName} · {t('signOut')}</button>
+          <button className="user-menu" type="button" onClick={signOut} title={userName}><span className="user-name">{userName}</span><span className="user-separator" aria-hidden="true"> · </span><span>{t('signOut')}</span></button>
         </div>
       </header>
 

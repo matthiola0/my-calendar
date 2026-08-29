@@ -412,9 +412,12 @@ footer p { margin: 0; font-family: var(--font-noto-serif-tc), serif; }
 }
 
 @media (max-width: 520px) {
+  .language-switcher { position: static; width: max-content; margin: 0 auto 16px; }
   .daybook-shell { width: calc(100% - 20px); }
-  .header-meta { gap: 8px; }
-  .user-menu { max-width: 66px; font-size: 10px; }
+  .site-header { gap: 8px; }
+  .header-meta { min-width: 0; flex: 1; justify-content: flex-end; gap: 8px; }
+  .user-menu { max-width: 56px; flex: 0 1 auto; font-size: 10px; }
+  .user-name, .user-separator { display: none; }
   .view-switch button { min-height: 30px; padding: 0 7px; font-size: 9px; }
   .view-switch button:first-child { max-width: 70px; overflow: hidden; white-space: nowrap; }
   .date-hero { display: block; }
