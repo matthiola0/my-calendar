@@ -227,7 +227,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .custom-note-card > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .custom-note-card h3 { margin: 0; font-family: var(--font-noto-serif-tc), serif; font-size: 18px; }
 .custom-note-card button { border: 0; background: transparent; color: #a09d94; font-size: 9px; cursor: pointer; }
-.custom-note-card textarea { width: 100%; flex: 1; min-height: 130px; margin-top: 14px; padding: 10px 0; resize: vertical; border: 0; outline: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent 29px, #e8e3d8 30px); color: var(--ink); font-family: var(--font-noto-serif-tc), serif; font-size: 13px; line-height: 30px; }
+.custom-note-card textarea { width: 100%; flex: 1; min-height: 130px; margin-top: 14px; padding: 2px 0 8px; resize: vertical; border: 0; outline: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent 29px, #e8e3d8 30px); color: var(--ink); font-family: var(--font-noto-serif-tc), serif; font-size: 13px; line-height: 30px; }
 .custom-record-empty { margin: 22px 0 0; padding: 22px; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); font-size: 11px; text-align: center; }
 
 footer { display: flex; justify-content: space-between; padding: 24px 4px 0; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
