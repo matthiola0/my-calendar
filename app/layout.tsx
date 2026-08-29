@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
-import { Geist_Mono, Noto_Sans_TC, Noto_Serif_TC } from 'next/font/google';
+import { Geist_Mono, Noto_Sans, Noto_Sans_TC, Noto_Serif, Noto_Serif_TC } from 'next/font/google';
 import './globals.css';
 import { LanguageProvider, LanguageSwitcher } from './lib/i18n';
 
-const sans = Noto_Sans_TC({ variable: '--font-noto-sans-tc', subsets: ['latin'], weight: ['400', '500', '700'] });
-const serif = Noto_Serif_TC({ variable: '--font-noto-serif-tc', subsets: ['latin'], weight: ['500', '600'] });
+const sans = Noto_Sans_TC({ variable: '--font-noto-sans-cjk', subsets: ['latin'], weight: ['400', '500', '700'] });
+const serif = Noto_Serif_TC({ variable: '--font-noto-serif-cjk', subsets: ['latin'], weight: ['500', '600'] });
+const latinSans = Noto_Sans({ variable: '--font-noto-sans-latin', subsets: ['latin'], weight: ['400', '500', '700'] });
+const latinSerif = Noto_Serif({ variable: '--font-noto-serif-latin', subsets: ['latin'], weight: ['500', '600'] });
 const mono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
 export const metadata: Metadata = {
@@ -30,7 +32,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
+      <body className={`${sans.variable} ${serif.variable} ${latinSans.variable} ${latinSerif.variable} ${mono.variable}`}>
         <LanguageProvider>
           {children}
           <LanguageSwitcher />

@@ -14,12 +14,18 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
+  --font-noto-sans-tc: var(--font-noto-sans-cjk);
+  --font-noto-serif-tc: var(--font-noto-serif-cjk);
   margin: 0;
   background:
     radial-gradient(circle at 13% 7%, rgba(255,255,255,.75), transparent 24rem),
     var(--paper);
   color: var(--ink);
   font-family: var(--font-noto-sans-tc), system-ui, sans-serif;
+}
+html[lang='en'] body {
+  --font-noto-sans-tc: var(--font-noto-sans-latin), var(--font-noto-sans-cjk);
+  --font-noto-serif-tc: var(--font-noto-serif-latin), var(--font-noto-serif-cjk);
 }
 button, input, textarea, select { font: inherit; }
 button { color: inherit; }
