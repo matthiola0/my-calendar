@@ -8,7 +8,7 @@ An AI-assisted calendar for planning macro cycles, building daily habits, and le
 
 [Live app](https://calendar.matthiola.dev/) · [AI planner guide](docs/ai-planner.md) · [Report a vulnerability](SECURITY.md)
 
-[English](README.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
+[English](README.md) | [繁體中文](docs/README.zh-TW.md) | [日本語](docs/README.ja.md)
 
 </div>
 
@@ -68,7 +68,7 @@ Requirements: Node.js 22.13 or newer.
 git clone https://github.com/matthiola0/my-calendar.git
 cd my-calendar
 npm install
-copy .env.example .env.local
+cp .env.example .env.local
 npm run dev
 ```
 

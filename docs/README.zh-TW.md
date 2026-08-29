@@ -6,13 +6,13 @@
 
 一個結合 AI 規劃、大週期、每日習慣與反思的個人行事曆。
 
-[開始使用](https://calendar.matthiola.dev/) · [AI 規劃說明](docs/ai-planner.md) · [安全問題回報](SECURITY.md)
+[開始使用](https://calendar.matthiola.dev/) · [AI 規劃說明](ai-planner.md) · [安全問題回報](../SECURITY.md)
 
-[English](README.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
+[English](../README.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
 </div>
 
-![Daybook AI 規劃器將目標拆成大週期與每日任務](docs/images/ai-planner-demo.png)
+![Daybook AI 規劃器將目標拆成大週期與每日任務](images/ai-planner-demo.png)
 
 ## 為什麼是 Daybook？
 
@@ -56,7 +56,7 @@ Daybook 將 James Clear 習慣方法中的幾個概念變成可操作的規劃�
 4. Daybook 再驗證日期、數量、連結與重複內容。
 5. 由你檢查並決定是否套用。
 
-套用只會新增，不會刪除或覆蓋原本內容。設定、限制、資料流程與範例請見 [AI 規劃說明](docs/ai-planner.md)。
+套用只會新增，不會刪除或覆蓋原本內容。設定、限制、資料流程與範例請見 [AI 規劃說明](ai-planner.md)。
 
 ## 開始開發
 
@@ -66,7 +66,7 @@ Daybook 將 James Clear 習慣方法中的幾個概念變成可操作的規劃�
 git clone https://github.com/matthiola0/my-calendar.git
 cd my-calendar
 npm install
-copy .env.example .env.local
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -89,8 +89,8 @@ docs            專案文件
 scripts         本機行事曆 agent CLI
 ```
 
-完整 agent 指令見 [AGENTS.md](AGENTS.md)。行事曆內容屬於私密資料，請勿放進公開 log、issue、截圖或 commit。
+完整 agent 指令見 [AGENTS.md](../AGENTS.md)。行事曆內容屬於私密資料，請勿放進公開 log、issue、截圖或 commit。
 
 ## 參與貢獻
 
-歡迎提出 issue 或 pull request。請保持修改範圍清楚、維持帳號資料隔離，並附上 lint、build 或手動驗證結果。安全問題請依 [SECURITY.md](SECURITY.md) 私下回報。
+歡迎提出 issue 或 pull request。請保持修改範圍清楚、維持帳號資料隔離，並附上 lint、build 或手動驗證結果。安全問題請依 [SECURITY.md](../SECURITY.md) 私下回報。

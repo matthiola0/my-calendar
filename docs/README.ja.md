@@ -6,13 +6,13 @@
 
 AI計画、長期サイクル、日々の習慣、振り返りを一つにした個人カレンダーです。
 
-[アプリを開く](https://calendar.matthiola.dev/) · [AIプランナーガイド](docs/ai-planner.md) · [脆弱性の報告](SECURITY.md)
+[アプリを開く](https://calendar.matthiola.dev/) · [AIプランナーガイド](ai-planner.md) · [脆弱性の報告](../SECURITY.md)
 
-[English](README.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
+[English](../README.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
 </div>
 
-![DaybookのAIプランナーが目標を長期サイクルとデイリータスクに分解する画面](docs/images/ai-planner-demo.png)
+![DaybookのAIプランナーが目標を長期サイクルとデイリータスクに分解する画面](images/ai-planner-demo.png)
 
 ## Daybookを使う理由
 
@@ -56,7 +56,7 @@ Daybookは、James Clearの習慣フレームワークの考え方を操作で�
 4. Daybookが日付、件数、リンク、重複を検証します。
 5. 内容を確認し、適用するかを選びます。
 
-適用は追加だけを行い、既存項目を削除・上書きしません。設定、制限、データフロー、例は[AIプランナーガイド](docs/ai-planner.md)をご覧ください。
+適用は追加だけを行い、既存項目を削除・上書きしません。設定、制限、データフロー、例は[AIプランナーガイド](ai-planner.md)をご覧ください。
 
 ## クイックスタート
 
@@ -66,7 +66,7 @@ Node.js 22.13以上が必要です。
 git clone https://github.com/matthiola0/my-calendar.git
 cd my-calendar
 npm install
-copy .env.example .env.local
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -89,8 +89,8 @@ docs            プロジェクトドキュメント
 scripts         ローカルカレンダーagent CLI
 ```
 
-agentコマンドの詳細は[AGENTS.md](AGENTS.md)にあります。カレンダー内容は個人データです。公開ログ、issue、スクリーンショット、commitには含めないでください。
+agentコマンドの詳細は[AGENTS.md](../AGENTS.md)にあります。カレンダー内容は個人データです。公開ログ、issue、スクリーンショット、commitには含めないでください。
 
 ## コントリビューション
 
-IssueとPull Requestを歓迎します。変更範囲を明確にし、アカウント分離を保ち、lint・build・手動確認の結果を添えてください。セキュリティ問題は公開issueではなく[SECURITY.md](SECURITY.md)の手順で報告してください。
+IssueとPull Requestを歓迎します。変更範囲を明確にし、アカウント分離を保ち、lint・build・手動確認の結果を添えてください。セキュリティ問題は公開issueではなく[SECURITY.md](../SECURITY.md)の手順で報告してください。
