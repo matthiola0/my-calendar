@@ -137,14 +137,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .task-form button:hover { background: #445847; }
 .task-form input:disabled, .task-form button:disabled, textarea:disabled, .task-item button:disabled { cursor: wait; opacity: .58; }
 .task-list { border-top: 1px solid var(--line); }
-.task-item { min-height: 65px; display: grid; grid-template-columns: 28px 32px 1fr 26px; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); }
+.task-item { min-height: 65px; display: grid; grid-template-columns: 28px 32px 1fr 62px; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); }
 .check-button { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid #babcb2; border-radius: 50%; background: transparent; color: white; font-size: 12px; cursor: pointer; }
 .task-item.done .check-button { border-color: var(--sage); background: var(--sage); }
 .task-index { color: #a8a79f; font-family: var(--font-geist-mono), monospace; font-size: 10px; }
 .task-item p { margin: 0; font-size: 15px; line-height: 1.5; }
 .task-item.done p { color: #a2a198; text-decoration: line-through; }
-.delete-button { border: 0; background: transparent; color: #aaa9a0; font-size: 20px; opacity: 0; cursor: pointer; transition: opacity .15s; }
-.task-item:hover .delete-button, .delete-button:focus-visible { opacity: 1; }
+.task-actions { display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
+.edit-button, .delete-button { width: 28px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #aaa9a0; opacity: 0; cursor: pointer; transition: opacity .15s, background .15s; }
+.edit-button { font-size: 11px; font-weight: 700; }
+.delete-button { font-size: 20px; }
+.task-item:hover .task-actions button, .task-actions button:focus-visible { opacity: 1; }
+.task-actions button:hover { background: #f0ede5; color: var(--ink); }
+.task-edit-form { grid-column: 3 / 5; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; }
+.task-edit-form input { min-width: 0; height: 42px; padding: 0 12px; border: 1px solid #aeb4aa; border-radius: 10px; background: #faf8f2; color: var(--ink); }
+.task-edit-form button { min-height: 36px; padding: 0 10px; border: 0; border-radius: 9px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.save-task-edit { background: var(--sage); color: white; }
+.cancel-task-edit { background: #eeeae1; color: var(--muted); }
 .empty-state { min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); text-align: center; }
 .empty-state span { width: 46px; height: 46px; display: grid; place-items: center; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 50%; color: var(--sage); font-size: 20px; }
 .empty-state p { margin: 0 0 6px; color: var(--ink); font-family: var(--font-noto-serif-tc), serif; font-size: 17px; }
@@ -263,9 +272,11 @@ footer p { margin: 0; font-family: var(--font-noto-serif-tc), serif; }
   .week-day strong { font-size: 17px; }
   .tasks-card { padding: 26px 20px; border-radius: 20px; }
   .progress-wrap p { display: none; }
-  .task-item { grid-template-columns: 28px 1fr 25px; }
+  .task-item { grid-template-columns: 28px 1fr 62px; }
   .task-index { display: none; }
-  .delete-button { opacity: .55; }
+  .task-actions button { opacity: .6; }
+  .task-edit-form { grid-column: 2 / 4; grid-template-columns: minmax(0, 1fr) auto; padding: 8px 0; }
+  .task-edit-form .cancel-task-edit { grid-column: 2; }
   .note-card { padding: 26px 22px 22px; border-radius: 20px; }
   .cycles-hero { display: block; padding: 36px 2px 26px; }
   .cycles-hero .primary-button { width: 100%; margin-top: 24px; }

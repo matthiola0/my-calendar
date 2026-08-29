@@ -70,6 +70,7 @@ export default function Daybook({ userName }: { userName: string }) {
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});
   const [taskText, setTaskText] = useState('');
+  const [editingTask, setEditingTask] = useState<{ id: string; text: string } | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('loading');
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDraftRef = useRef<{ date: string; entry: DayEntry } | null>(null);
@@ -216,6 +217,23 @@ export default function Daybook({ userName }: { userName: string }) {
     );
   };
 
+  const saveTaskEdit = (event: FormEvent) => {
+    event.preventDefault();
+    const text = editingTask?.text.trim();
+    if (!editingTask || !text) return;
+
+    updateEntry(
+      (current) => ({
+        ...current,
+        tasks: current.tasks.map((task) =>
+          task.id === editingTask.id ? { ...task, text } : task,
+        ),
+      }),
+      true,
+    );
+    setEditingTask(null);
+  };
+
   const statusText = {
     loading: '正在讀取雲端資料…',
     saving: '正在同步…',
@@ -356,8 +374,30 @@ export default function Daybook({ userName }: { userName: string }) {
                     {task.done && '✓'}
                   </button>
                   <span className="task-index">{String(index + 1).padStart(2, '0')}</span>
-                  <p>{task.text}</p>
-                  <button className="delete-button" type="button" onClick={() => deleteTask(task.id)} aria-label={`刪除：${task.text}`} disabled={!isReady}>×</button>
+                  {editingTask?.id === task.id ? (
+                    <form className="task-edit-form" onSubmit={saveTaskEdit}>
+                      <input
+                        value={editingTask.text}
+                        onChange={(event) => setEditingTask({ id: task.id, text: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') setEditingTask(null);
+                        }}
+                        aria-label={`編輯待辦：${task.text}`}
+                        maxLength={500}
+                        autoFocus
+                      />
+                      <button className="save-task-edit" type="submit" disabled={!editingTask.text.trim() || !isReady}>儲存</button>
+                      <button className="cancel-task-edit" type="button" onClick={() => setEditingTask(null)}>取消</button>
+                    </form>
+                  ) : (
+                    <>
+                      <p>{task.text}</p>
+                      <div className="task-actions">
+                        <button className="edit-button" type="button" onClick={() => setEditingTask({ id: task.id, text: task.text })} aria-label={`編輯：${task.text}`} disabled={!isReady}>編</button>
+                        <button className="delete-button" type="button" onClick={() => deleteTask(task.id)} aria-label={`刪除：${task.text}`} disabled={!isReady}>×</button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))
             )}
