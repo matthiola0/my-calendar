@@ -59,13 +59,13 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
           </span>
         </Link>
         <div>
-          <p className="eyebrow">一天一頁 · 只屬於你的空間</p>
-          <h1>把待辦、生活與心情，<br />好好收進每一天。</h1>
+          <p className="eyebrow">大目標拆小 · 小行動成習慣</p>
+          <h1>把想做到的事，<br />拆成今天能開始的一小步。</h1>
           <p className="auth-description">
-            無論用手機或電腦，登入後都能回到自己的行事曆。每個帳號的內容彼此獨立。
+            讓 AI 協助規劃、回顧與調整，用每天做得到的小任務，慢慢累積真正的改變。
           </p>
         </div>
-        <p className="auth-footnote">PRIVATE BY ACCOUNT · SYNCED ACROSS DEVICES</p>
+        <p className="auth-footnote">SMALL STEPS · AI GUIDED · LASTING CHANGE</p>
       </section>
 
       <section className="auth-panel" aria-labelledby="auth-title">
