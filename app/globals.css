@@ -169,18 +169,24 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .task-cycle-label { min-width: 0; padding: 0 5px 6px; overflow: hidden; color: var(--sage); font-size: 9px; font-weight: 700; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .task-meta { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 5px 4px; }
 .task-meta span { padding: 2px 6px; border-radius: 99px; background: var(--sage-soft); color: var(--sage); font-size: 8px; font-weight: 700; line-height: 1.4; }
+.task-meta .streak-badge { background: #f3ead6; color: #8b672d; }
+.identity-note { padding: 0 5px 3px; color: var(--sage); font-size: 9px; font-weight: 700; line-height: 1.45; }
 .habit-note { padding: 0 5px 3px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.recovery-note { margin: 2px 5px 4px; padding: 7px 9px; border-left: 2px solid #b87555; border-radius: 0 7px 7px 0; background: #fbf0e9; color: #885039; font-size: 9px; line-height: 1.5; }
 .task-actions { display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
 .edit-button, .delete-button { width: 28px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #aaa9a0; opacity: 0; cursor: pointer; transition: opacity .15s, background .15s; }
 .edit-button { font-size: 11px; font-weight: 700; }
 .delete-button { font-size: 20px; }
 .task-item:hover .task-actions button, .task-actions button:focus-visible { opacity: 1; }
 .task-actions button:hover { background: #f0ede5; color: var(--ink); }
-.task-edit-form { grid-column: 3 / 5; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; }
+.task-edit-form { grid-column: 3 / 5; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .task-edit-fields { min-width: 0; display: grid; gap: 6px; padding: 7px 0; }
 .task-edit-form input { min-width: 0; width: 100%; height: 42px; padding: 0 12px; border: 1px solid #aeb4aa; border-radius: 10px; background: #faf8f2; color: var(--ink); }
 .task-edit-form button { min-height: 36px; padding: 0 10px; border: 0; border-radius: 9px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.task-edit-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .save-task-edit { background: var(--sage); color: white; }
+.save-series-edit { background: #dfe8df; color: var(--sage); }
+.delete-series-edit { background: #f7e7e1; color: #9b4d42; }
 .cancel-task-edit { background: #eeeae1; color: var(--muted); }
 .day-section-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 18px; }
 .day-section { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #faf8f2; transition: border-color .15s, background .15s; }
@@ -194,8 +200,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .section-task-list .task-item { grid-template-columns: 28px 1fr 62px; padding: 5px 7px; border-color: var(--line); cursor: grab; }
 .section-task-list .task-item:last-child { border-bottom: 0; }
 .section-task-list .task-index { display: none; }
-.section-task-list .task-edit-form { grid-column: 2 / 4; grid-template-columns: minmax(0, 1fr) auto; padding: 6px 0; }
-.section-task-list .task-edit-form .cancel-task-edit { grid-column: 2; }
+.section-task-list .task-edit-form { grid-column: 2 / 4; padding: 6px 0; }
 .empty-state { min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); text-align: center; }
 .empty-state span { width: 46px; height: 46px; display: grid; place-items: center; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 50%; color: var(--sage); font-size: 20px; }
 .empty-state p { margin: 0 0 6px; color: var(--ink); font-family: var(--font-noto-serif-tc), serif; font-size: 17px; }
@@ -345,8 +350,7 @@ footer p { margin: 0; font-family: var(--font-noto-serif-tc), serif; }
   .task-item { grid-template-columns: 28px 1fr 62px; }
   .task-index { display: none; }
   .task-actions button { opacity: .6; }
-  .task-edit-form { grid-column: 2 / 4; grid-template-columns: minmax(0, 1fr) auto; padding: 8px 0; }
-  .task-edit-form .cancel-task-edit { grid-column: 2; }
+  .task-edit-form { grid-column: 2 / 4; padding: 8px 0; }
   .task-basic-options, .repeat-grid { grid-template-columns: 1fr; }
   .day-section-board { grid-template-columns: 1fr; }
   .note-card { padding: 26px 22px 22px; border-radius: 20px; }

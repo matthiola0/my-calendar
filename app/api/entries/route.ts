@@ -16,6 +16,9 @@ type Task = {
   recurrenceId: string | null;
   habitCue: string | null;
   tinyStart: string | null;
+  identity: string | null;
+  streak: number;
+  recoveryDue: boolean;
 };
 
 type DayEntry = {
@@ -27,6 +30,7 @@ type DayEntry = {
 
 type TaskRow = {
   id: string;
+  date: string;
   text: string;
   done: number;
   cycleId: string | null;
@@ -35,6 +39,13 @@ type TaskRow = {
   recurrenceId: string | null;
   habitCue: string | null;
   tinyStart: string | null;
+  identity: string | null;
+};
+
+type SeriesRow = {
+  recurrenceId: string;
+  date: string;
+  done: number;
 };
 
 export async function GET(request: Request) {
@@ -54,13 +65,14 @@ export async function GET(request: Request) {
     .first<{ activity: string; reflection: string; revision: string }>();
   const taskRows = await db
     .prepare(
-      `SELECT id, text, done, cycle_id AS cycleId, phase_id AS phaseId,
+      `SELECT id, date, text, done, cycle_id AS cycleId, phase_id AS phaseId,
         section_id AS sectionId, recurrence_id AS recurrenceId,
-        habit_cue AS habitCue, tiny_start AS tinyStart
+        habit_cue AS habitCue, tiny_start AS tinyStart, identity
        FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC`,
     )
     .bind(ownerId, date)
     .all<TaskRow>();
+  const seriesStats = await loadSeriesStats(db, ownerId, taskRows.results);
 
   return Response.json(
     {
@@ -74,6 +86,9 @@ export async function GET(request: Request) {
         recurrenceId: task.recurrenceId,
         habitCue: task.habitCue,
         tinyStart: task.tinyStart,
+        identity: task.identity,
+        streak: task.recurrenceId ? seriesStats.get(`${task.recurrenceId}:${date}`)?.streak ?? 0 : 0,
+        recoveryDue: task.recurrenceId ? seriesStats.get(`${task.recurrenceId}:${date}`)?.recoveryDue ?? false : false,
       })),
       activity: day?.activity ?? '',
       reflection: day?.reflection ?? '',
@@ -150,8 +165,8 @@ export async function PUT(request: Request) {
         .prepare(`
           INSERT INTO tasks
             (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-             recurrence_id, habit_cue, tiny_start, position, created_at, updated_at)
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+             recurrence_id, habit_cue, tiny_start, identity, position, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE EXISTS (
             SELECT 1 FROM day_entries
             WHERE owner_id = ? AND date = ? AND revision = ?
@@ -169,6 +184,7 @@ export async function PUT(request: Request) {
           task.recurrenceId,
           task.habitCue,
           task.tinyStart,
+          task.identity,
           position,
           now,
           now,
@@ -222,6 +238,7 @@ function parseEntry(body: unknown):
     const recurrenceId = task.recurrenceId === undefined ? null : task.recurrenceId;
     const habitCue = task.habitCue === undefined ? null : task.habitCue;
     const tinyStart = task.tinyStart === undefined ? null : task.tinyStart;
+    const identity = task.identity === undefined ? null : task.identity;
     if (
       typeof task.id !== 'string' ||
       task.id.length < 1 ||
@@ -237,7 +254,8 @@ function parseEntry(body: unknown):
       (sectionId !== null && (typeof sectionId !== 'string' || sectionId.length < 1 || sectionId.length > 100)) ||
       (recurrenceId !== null && (typeof recurrenceId !== 'string' || recurrenceId.length < 1 || recurrenceId.length > 100)) ||
       (habitCue !== null && (typeof habitCue !== 'string' || habitCue.length > 300)) ||
-      (tinyStart !== null && (typeof tinyStart !== 'string' || tinyStart.length > 300))
+      (tinyStart !== null && (typeof tinyStart !== 'string' || tinyStart.length > 300)) ||
+      (identity !== null && (typeof identity !== 'string' || identity.length > 300))
     ) {
       return { ok: false, error: '待辦項目內容不正確。' };
     }
@@ -252,6 +270,9 @@ function parseEntry(body: unknown):
       recurrenceId,
       habitCue: typeof habitCue === 'string' && habitCue.trim() ? habitCue.trim() : null,
       tinyStart: typeof tinyStart === 'string' && tinyStart.trim() ? tinyStart.trim() : null,
+      identity: typeof identity === 'string' && identity.trim() ? identity.trim() : null,
+      streak: 0,
+      recoveryDue: false,
     });
   }
 
@@ -265,6 +286,47 @@ function parseEntry(body: unknown):
       revision: candidate.revision,
     },
   };
+}
+
+async function loadSeriesStats(db: D1Database, ownerId: string, tasks: TaskRow[]) {
+  const recurrenceIds = [...new Set(tasks.flatMap((task) => task.recurrenceId ? [task.recurrenceId] : []))];
+  const stats = new Map<string, { streak: number; recoveryDue: boolean }>();
+  if (recurrenceIds.length === 0) return stats;
+
+  const placeholders = recurrenceIds.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(`
+      SELECT recurrence_id AS recurrenceId, date, done
+      FROM tasks
+      WHERE owner_id = ? AND recurrence_id IN (${placeholders})
+      ORDER BY recurrence_id, date, position
+    `)
+    .bind(ownerId, ...recurrenceIds)
+    .all<SeriesRow>();
+  const grouped = new Map<string, SeriesRow[]>();
+  for (const row of rows.results) {
+    const series = grouped.get(row.recurrenceId) ?? [];
+    series.push(row);
+    grouped.set(row.recurrenceId, series);
+  }
+
+  for (const task of tasks) {
+    if (!task.recurrenceId) continue;
+    const series = grouped.get(task.recurrenceId) ?? [];
+    const index = series.findIndex((row) => row.date === task.date);
+    if (index < 0) continue;
+    let streak = 0;
+    let cursor = series[index].done ? index : index - 1;
+    while (cursor >= 0 && series[cursor].done) {
+      streak += 1;
+      cursor -= 1;
+    }
+    stats.set(`${task.recurrenceId}:${task.date}`, {
+      streak,
+      recoveryDue: !series[index].done && index > 0 && !series[index - 1].done,
+    });
+  }
+  return stats;
 }
 
 async function taskReferencesAreValid(db: D1Database, ownerId: string, tasks: Task[]) {

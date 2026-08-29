@@ -11,7 +11,9 @@ npm run calendar -- remove YYYY-MM-DD TASK_ID
 npm run calendar -- link YYYY-MM-DD TASK_ID CYCLE_ID [PHASE_ID]
 npm run calendar -- unlink YYYY-MM-DD TASK_ID
 npm run calendar -- move YYYY-MM-DD TASK_ID SECTION_ID|none
-npm run calendar -- habit YYYY-MM-DD TASK_ID "cue" "two-minute start"
+npm run calendar -- habit YYYY-MM-DD TASK_ID "cue" "two-minute start" "identity"
+npm run calendar -- series-update YYYY-MM-DD TASK_ID "task" "cue" "two-minute start" "identity"
+npm run calendar -- series-remove YYYY-MM-DD TASK_ID
 npm run calendar -- activity YYYY-MM-DD "what happened"
 npm run calendar -- reflection YYYY-MM-DD "reflection"
 ```

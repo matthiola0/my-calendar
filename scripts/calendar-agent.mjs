@@ -35,6 +35,7 @@ switch (command) {
       recurrenceId: null,
       habitCue: null,
       tinyStart: null,
+      identity: null,
     });
     await saveEntry(date, entry);
     console.log(`Added task to ${date}: ${text}`);
@@ -64,6 +65,7 @@ switch (command) {
         sectionId: null,
         habitCue: null,
         tinyStart: null,
+        identity: null,
         recurrence,
       }),
     });
@@ -139,15 +141,55 @@ switch (command) {
     break;
   }
   case 'habit': {
-    const [date, taskId, cue = '', tinyStart = ''] = args;
-    if (!date || !taskId) fail('Usage: npm run calendar -- habit YYYY-MM-DD TASK_ID "cue" "two-minute start"');
+    const [date, taskId, cue = '', tinyStart = '', identity = ''] = args;
+    if (!date || !taskId) fail('Usage: npm run calendar -- habit YYYY-MM-DD TASK_ID "cue" "two-minute start" "identity"');
     const entry = await getEntry(date);
     const task = entry.tasks.find((item) => item.id === taskId);
     if (!task) fail(`Task not found: ${taskId}`);
     task.habitCue = cue.trim() || null;
     task.tinyStart = tinyStart.trim() || null;
+    task.identity = identity.trim() || null;
     await saveEntry(date, entry);
     console.log(`Updated habit design for: ${task.text}`);
+    break;
+  }
+  case 'series-update': {
+    const [date, taskId, text, cue = '', tinyStart = '', identity = ''] = args;
+    if (!date || !taskId || !text) {
+      fail('Usage: npm run calendar -- series-update YYYY-MM-DD TASK_ID "task" "cue" "two-minute start" "identity"');
+    }
+    const entry = await getEntry(date);
+    const task = entry.tasks.find((item) => item.id === taskId);
+    if (!task) fail(`Task not found: ${taskId}`);
+    if (!task.recurrenceId) fail(`Task is not recurring: ${taskId}`);
+    const result = await request('/api/recurring-tasks', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        recurrenceId: task.recurrenceId,
+        text,
+        cycleId: task.cycleId,
+        phaseId: task.phaseId,
+        sectionId: task.sectionId,
+        habitCue: cue.trim() || null,
+        tinyStart: tinyStart.trim() || null,
+        identity: identity.trim() || null,
+      }),
+    });
+    console.log(`Updated ${result.count} tasks in the recurring series.`);
+    break;
+  }
+  case 'series-remove': {
+    const [date, taskId] = args;
+    if (!date || !taskId) fail('Usage: npm run calendar -- series-remove YYYY-MM-DD TASK_ID');
+    const entry = await getEntry(date);
+    const task = entry.tasks.find((item) => item.id === taskId);
+    if (!task) fail(`Task not found: ${taskId}`);
+    if (!task.recurrenceId) fail(`Task is not recurring: ${taskId}`);
+    const result = await request('/api/recurring-tasks', {
+      method: 'DELETE',
+      body: JSON.stringify({ recurrenceId: task.recurrenceId }),
+    });
+    console.log(`Removed ${result.count} tasks from the recurring series.`);
     break;
   }
   case 'activity': {
@@ -333,7 +375,9 @@ function printHelp() {
   link       YYYY-MM-DD TASK_ID CYCLE_ID [PHASE_ID]
   unlink     YYYY-MM-DD TASK_ID
   move       YYYY-MM-DD TASK_ID SECTION_ID|none
-  habit      YYYY-MM-DD TASK_ID "cue" "two-minute start"
+  habit      YYYY-MM-DD TASK_ID "cue" "two-minute start" "identity"
+  series-update YYYY-MM-DD TASK_ID "task" "cue" "two-minute start" "identity"
+  series-remove YYYY-MM-DD TASK_ID
   activity   YYYY-MM-DD "what happened"
   reflection YYYY-MM-DD "reflection"`);
   console.log(`

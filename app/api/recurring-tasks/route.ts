@@ -20,7 +20,12 @@ type TaskRequest = {
   sectionId: string | null;
   habitCue: string | null;
   tinyStart: string | null;
+  identity: string | null;
   recurrence: RepeatRule;
+};
+
+type SeriesUpdateRequest = Omit<TaskRequest, 'startDate' | 'recurrence'> & {
+  recurrenceId: string;
 };
 
 export async function POST(request: Request) {
@@ -69,8 +74,8 @@ export async function POST(request: Request) {
         .prepare(`
           INSERT INTO tasks
             (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-             recurrence_id, habit_cue, tiny_start, position, created_at, updated_at)
-          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?,
+             recurrence_id, habit_cue, tiny_start, identity, position, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?,
             (SELECT COALESCE(MAX(position), -1) + 1 FROM tasks WHERE owner_id = ? AND date = ?),
             ?, ?)
         `)
@@ -85,6 +90,7 @@ export async function POST(request: Request) {
           recurrenceId,
           parsed.habitCue,
           parsed.tinyStart,
+          parsed.identity,
           ownerId,
           date,
           now,
@@ -100,6 +106,100 @@ export async function POST(request: Request) {
   return Response.json({ ok: true, count: dates.length, recurrenceId });
 }
 
+export async function PATCH(request: Request) {
+  const ownerId = await getAuthorizedOwnerId(request);
+  if (!ownerId) return unauthorized();
+
+  const body = await readJson(request);
+  if (!body.ok) return body.response;
+  const parsed = parseSeriesUpdate(body.value);
+  if (!parsed) {
+    return Response.json({ error: '整組重複任務內容不正確。' }, { status: 400 });
+  }
+
+  await ensureSchema();
+  const db = getDatabaseBinding();
+  if (!(await referencesAreValid(db, ownerId, parsed))) {
+    return Response.json({ error: '綁定的大週期、階段或每日分段不存在。' }, { status: 400 });
+  }
+  const existing = await db
+    .prepare('SELECT COUNT(*) AS count FROM tasks WHERE owner_id = ? AND recurrence_id = ?')
+    .bind(ownerId, parsed.recurrenceId)
+    .first<{ count: number }>();
+  if (!existing?.count) return seriesNotFound();
+
+  const now = Date.now();
+  const revision = crypto.randomUUID();
+  const results = await db.batch([
+    db
+      .prepare(`
+        UPDATE day_entries SET revision = ?, updated_at = ?
+        WHERE owner_id = ? AND date IN (
+          SELECT date FROM tasks WHERE owner_id = ? AND recurrence_id = ?
+        )
+      `)
+      .bind(revision, now, ownerId, ownerId, parsed.recurrenceId),
+    db
+      .prepare(`
+        UPDATE tasks SET text = ?, cycle_id = ?, phase_id = ?, section_id = ?,
+          habit_cue = ?, tiny_start = ?, identity = ?, updated_at = ?
+        WHERE owner_id = ? AND recurrence_id = ?
+      `)
+      .bind(
+        parsed.text,
+        parsed.cycleId,
+        parsed.phaseId,
+        parsed.sectionId,
+        parsed.habitCue,
+        parsed.tinyStart,
+        parsed.identity,
+        now,
+        ownerId,
+        parsed.recurrenceId,
+      ),
+  ]);
+  return Response.json({ ok: true, count: results[1].meta.changes });
+}
+
+export async function DELETE(request: Request) {
+  const ownerId = await getAuthorizedOwnerId(request);
+  if (!ownerId) return unauthorized();
+
+  const body = await readJson(request);
+  if (!body.ok) return body.response;
+  const recurrenceId = body.value && typeof body.value === 'object'
+    ? optionalId((body.value as Record<string, unknown>).recurrenceId)
+    : undefined;
+  if (!recurrenceId) {
+    return Response.json({ error: '缺少重複任務系列。' }, { status: 400 });
+  }
+
+  await ensureSchema();
+  const db = getDatabaseBinding();
+  const existing = await db
+    .prepare('SELECT COUNT(*) AS count FROM tasks WHERE owner_id = ? AND recurrence_id = ?')
+    .bind(ownerId, recurrenceId)
+    .first<{ count: number }>();
+  if (!existing?.count) return seriesNotFound();
+
+  const now = Date.now();
+  const revision = crypto.randomUUID();
+  const results = await db.batch([
+    db
+      .prepare(`
+        UPDATE day_entries SET revision = ?, updated_at = ?
+        WHERE owner_id = ? AND date IN (
+          SELECT date FROM tasks WHERE owner_id = ? AND recurrence_id = ?
+        )
+      `)
+      .bind(revision, now, ownerId, ownerId, recurrenceId),
+    db
+      .prepare('DELETE FROM tasks WHERE owner_id = ? AND recurrence_id = ?')
+      .bind(ownerId, recurrenceId),
+  ]);
+  return Response.json({ ok: true, count: results[1].meta.changes });
+}
+
 function parseRequest(body: unknown): TaskRequest | null {
   if (!body || typeof body !== 'object') return null;
   const candidate = body as Record<string, unknown>;
@@ -108,6 +208,7 @@ function parseRequest(body: unknown): TaskRequest | null {
   const sectionId = optionalId(candidate.sectionId);
   const habitCue = optionalText(candidate.habitCue, 300);
   const tinyStart = optionalText(candidate.tinyStart, 300);
+  const identity = optionalText(candidate.identity, 300);
   if (
     typeof candidate.startDate !== 'string' ||
     !isValidDate(candidate.startDate) ||
@@ -119,6 +220,7 @@ function parseRequest(body: unknown): TaskRequest | null {
     sectionId === undefined ||
     habitCue === undefined ||
     tinyStart === undefined ||
+    identity === undefined ||
     (phaseId !== null && cycleId === null)
   ) return null;
 
@@ -132,7 +234,43 @@ function parseRequest(body: unknown): TaskRequest | null {
     sectionId,
     habitCue,
     tinyStart,
+    identity,
     recurrence,
+  };
+}
+
+function parseSeriesUpdate(body: unknown): SeriesUpdateRequest | null {
+  if (!body || typeof body !== 'object') return null;
+  const candidate = body as Record<string, unknown>;
+  const recurrenceId = optionalId(candidate.recurrenceId);
+  const cycleId = optionalId(candidate.cycleId);
+  const phaseId = optionalId(candidate.phaseId);
+  const sectionId = optionalId(candidate.sectionId);
+  const habitCue = optionalText(candidate.habitCue, 300);
+  const tinyStart = optionalText(candidate.tinyStart, 300);
+  const identity = optionalText(candidate.identity, 300);
+  if (
+    !recurrenceId ||
+    typeof candidate.text !== 'string' ||
+    !candidate.text.trim() ||
+    candidate.text.length > 500 ||
+    cycleId === undefined ||
+    phaseId === undefined ||
+    sectionId === undefined ||
+    habitCue === undefined ||
+    tinyStart === undefined ||
+    identity === undefined ||
+    (phaseId !== null && cycleId === null)
+  ) return null;
+  return {
+    recurrenceId,
+    text: candidate.text.trim(),
+    cycleId,
+    phaseId,
+    sectionId,
+    habitCue,
+    tinyStart,
+    identity,
   };
 }
 
@@ -201,7 +339,11 @@ function formatDate(date: Date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
-async function referencesAreValid(db: D1Database, ownerId: string, task: TaskRequest) {
+async function referencesAreValid(
+  db: D1Database,
+  ownerId: string,
+  task: Pick<TaskRequest, 'cycleId' | 'phaseId' | 'sectionId'>,
+) {
   const [cycle, phase, section] = await Promise.all([
     task.cycleId
       ? db.prepare('SELECT id FROM cycles WHERE owner_id = ? AND id = ?').bind(ownerId, task.cycleId).first()
@@ -241,4 +383,22 @@ function isValidDate(value: string) {
 
 function unauthorized() {
   return Response.json({ error: '需要登入或有效的 agent 金鑰。' }, { status: 401 });
+}
+
+async function readJson(request: Request): Promise<
+  | { ok: true; value: unknown }
+  | { ok: false; response: Response }
+> {
+  try {
+    return { ok: true, value: await request.json() };
+  } catch {
+    return {
+      ok: false,
+      response: Response.json({ error: 'JSON 格式不正確。' }, { status: 400 }),
+    };
+  }
+}
+
+function seriesNotFound() {
+  return Response.json({ error: '找不到這組重複任務。' }, { status: 404 });
 }

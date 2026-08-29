@@ -13,12 +13,15 @@ type Task = {
   recurrenceId: string | null;
   habitCue: string | null;
   tinyStart: string | null;
+  identity: string | null;
+  streak: number;
+  recoveryDue: boolean;
 };
 
 type CycleOption = { id: string; title: string; phases: Array<{ id: string; title: string }> };
 type DaySection = { id: string; title: string };
 type CustomField = { id: string; title: string; content: string };
-type TaskDraft = Pick<Task, 'id' | 'text' | 'cycleId' | 'phaseId' | 'sectionId' | 'habitCue' | 'tinyStart'>;
+type TaskDraft = Pick<Task, 'id' | 'text' | 'cycleId' | 'phaseId' | 'sectionId' | 'recurrenceId' | 'habitCue' | 'tinyStart' | 'identity'>;
 type DayEntry = { tasks: Task[]; activity: string; reflection: string; revision: string | null };
 type SyncStatus = 'loading' | 'saving' | 'saved' | 'conflict' | 'error';
 type RepeatUnit = '' | 'day' | 'week' | 'month';
@@ -123,6 +126,7 @@ export default function Daybook({ userName }: { userName: string }) {
   const [taskSection, setTaskSection] = useState('');
   const [habitCue, setHabitCue] = useState('');
   const [tinyStart, setTinyStart] = useState('');
+  const [identity, setIdentity] = useState('');
   const [repeatUnit, setRepeatUnit] = useState<RepeatUnit>('');
   const [repeatInterval, setRepeatInterval] = useState(1);
   const [repeatEndMode, setRepeatEndMode] = useState<'count' | 'date'>('count');
@@ -267,7 +271,7 @@ export default function Daybook({ userName }: { userName: string }) {
       const response = await fetch('/api/recurring-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startDate: selectedDate, text, ...link, sectionId: taskSection || null, habitCue: habitCue || null, tinyStart: tinyStart || null, recurrence }),
+        body: JSON.stringify({ startDate: selectedDate, text, ...link, sectionId: taskSection || null, habitCue: habitCue || null, tinyStart: tinyStart || null, identity: identity || null, recurrence }),
       });
       if (!response.ok) {
         const result = await response.json().catch(() => ({ error: '無法建立任務。' }));
@@ -280,6 +284,7 @@ export default function Daybook({ userName }: { userName: string }) {
       setTaskText('');
       setHabitCue('');
       setTinyStart('');
+      setIdentity('');
       setTaskMessage(result.count > 1 ? `已建立 ${result.count} 個重複任務。` : '已加入今天。');
       setSyncStatus('saved');
     } catch (error) {
@@ -291,7 +296,7 @@ export default function Daybook({ userName }: { userName: string }) {
   };
 
   const beginTaskEdit = (task: Task) => {
-    setEditingTask({ id: task.id, text: task.text, cycleId: task.cycleId, phaseId: task.phaseId, sectionId: task.sectionId, habitCue: task.habitCue, tinyStart: task.tinyStart });
+    setEditingTask({ id: task.id, text: task.text, cycleId: task.cycleId, phaseId: task.phaseId, sectionId: task.sectionId, recurrenceId: task.recurrenceId, habitCue: task.habitCue, tinyStart: task.tinyStart, identity: task.identity });
   };
 
   const taskCycleLabel = (task: Task) => {
@@ -303,7 +308,12 @@ export default function Daybook({ userName }: { userName: string }) {
   };
 
   const toggleTask = (id: string) => {
-    updateEntry((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, done: !task.done } : task) }), true);
+    updateEntry((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => task.id === id
+        ? { ...task, done: !task.done, streak: task.done ? Math.max(0, task.streak - 1) : task.streak + 1, recoveryDue: task.done ? task.recoveryDue : false }
+        : task),
+    }), true);
   };
 
   const deleteTask = (id: string) => {
@@ -322,10 +332,76 @@ export default function Daybook({ userName }: { userName: string }) {
     updateEntry((current) => ({
       ...current,
       tasks: current.tasks.map((task) => task.id === editingTask.id
-        ? { ...task, text, cycleId: editingTask.cycleId, phaseId: editingTask.phaseId, sectionId: editingTask.sectionId, habitCue: editingTask.habitCue?.trim() || null, tinyStart: editingTask.tinyStart?.trim() || null }
+        ? { ...task, text, cycleId: editingTask.cycleId, phaseId: editingTask.phaseId, sectionId: editingTask.sectionId, habitCue: editingTask.habitCue?.trim() || null, tinyStart: editingTask.tinyStart?.trim() || null, identity: editingTask.identity?.trim() || null }
         : task),
     }), true);
     setEditingTask(null);
+  };
+
+  const saveTaskSeries = async () => {
+    const text = editingTask?.text.trim();
+    if (!editingTask?.recurrenceId || !text) return;
+    setIsAddingTask(true);
+    setTaskMessage('');
+    setSyncStatus('saving');
+    await flushPendingSave();
+    try {
+      const response = await fetch('/api/recurring-tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recurrenceId: editingTask.recurrenceId,
+          text,
+          cycleId: editingTask.cycleId,
+          phaseId: editingTask.phaseId,
+          sectionId: editingTask.sectionId,
+          habitCue: editingTask.habitCue?.trim() || null,
+          tinyStart: editingTask.tinyStart?.trim() || null,
+          identity: editingTask.identity?.trim() || null,
+        }),
+      });
+      const result = await response.json().catch(() => ({ error: '無法更新重複任務。' })) as { count?: number; error?: string };
+      if (!response.ok) throw new Error(result.error ?? '無法更新重複任務。');
+      const next = await readEntry(selectedDate);
+      revisionsRef.current[selectedDate] = next.revision;
+      setEntries((current) => ({ ...current, [selectedDate]: next }));
+      setEditingTask(null);
+      setTaskMessage(`已更新全系列 ${result.count ?? 0} 個任務。`);
+      setSyncStatus('saved');
+    } catch (error) {
+      setTaskMessage(error instanceof Error ? error.message : '無法更新重複任務。');
+      setSyncStatus('error');
+    } finally {
+      setIsAddingTask(false);
+    }
+  };
+
+  const deleteTaskSeries = async () => {
+    if (!editingTask?.recurrenceId || !window.confirm('刪除這一整組重複任務？所有日期的這組任務都會被刪除。')) return;
+    setIsAddingTask(true);
+    setTaskMessage('');
+    setSyncStatus('saving');
+    await flushPendingSave();
+    try {
+      const response = await fetch('/api/recurring-tasks', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recurrenceId: editingTask.recurrenceId }),
+      });
+      const result = await response.json().catch(() => ({ error: '無法刪除重複任務。' })) as { count?: number; error?: string };
+      if (!response.ok) throw new Error(result.error ?? '無法刪除重複任務。');
+      const next = await readEntry(selectedDate);
+      revisionsRef.current[selectedDate] = next.revision;
+      setEntries((current) => ({ ...current, [selectedDate]: next }));
+      setEditingTask(null);
+      setTaskMessage(`已刪除全系列 ${result.count ?? 0} 個任務。`);
+      setSyncStatus('saved');
+    } catch (error) {
+      setTaskMessage(error instanceof Error ? error.message : '無法刪除重複任務。');
+      setSyncStatus('error');
+    } finally {
+      setIsAddingTask(false);
+    }
   };
 
   const saveSections = async (next: DaySection[]) => {
@@ -419,17 +495,24 @@ export default function Daybook({ userName }: { userName: string }) {
             <select value={editingTask.sectionId ?? ''} onChange={(event) => setEditingTask((current) => current ? { ...current, sectionId: event.target.value || null } : current)} aria-label="安排時段"><SectionOptions sections={sections} /></select>
             <input value={editingTask.habitCue ?? ''} onChange={(event) => setEditingTask((current) => current ? { ...current, habitCue: event.target.value } : current)} placeholder="提示：在什麼行為之後開始？" maxLength={300} />
             <input value={editingTask.tinyStart ?? ''} onChange={(event) => setEditingTask((current) => current ? { ...current, tinyStart: event.target.value } : current)} placeholder="兩分鐘版本：先做哪個最小動作？" maxLength={300} />
+            <input value={editingTask.identity ?? ''} onChange={(event) => setEditingTask((current) => current ? { ...current, identity: event.target.value } : current)} placeholder="身份：我想成為怎樣的人？" maxLength={300} />
           </div>
-          <button className="save-task-edit" type="submit" disabled={!editingTask.text.trim() || !isReady}>儲存</button>
-          <button className="cancel-task-edit" type="button" onClick={() => setEditingTask(null)}>取消</button>
+          <div className="task-edit-actions">
+            <button className="save-task-edit" type="submit" disabled={!editingTask.text.trim() || !isReady}>只儲存這次</button>
+            {editingTask.recurrenceId && <button className="save-series-edit" type="button" onClick={() => void saveTaskSeries()} disabled={!editingTask.text.trim() || !isReady}>套用全系列</button>}
+            {editingTask.recurrenceId && <button className="delete-series-edit" type="button" onClick={() => void deleteTaskSeries()} disabled={!isReady}>刪除全系列</button>}
+            <button className="cancel-task-edit" type="button" onClick={() => setEditingTask(null)}>取消</button>
+          </div>
         </form>
       ) : (
         <>
           <div className="task-copy">
             <button className="task-text-button" type="button" onClick={() => beginTaskEdit(task)} aria-label={`編輯待辦：${task.text}`} title="點擊編輯；也可拖曳到時段" disabled={!isReady}>{task.text}</button>
-            <div className="task-meta">{taskCycleLabel(task) && <span>↳ {taskCycleLabel(task)}</span>}{task.recurrenceId && <span>↻ 重複</span>}</div>
+            <div className="task-meta">{taskCycleLabel(task) && <span>↳ {taskCycleLabel(task)}</span>}{task.recurrenceId && <span>↻ 重複</span>}{task.recurrenceId && task.streak > 0 && <span className="streak-badge">連續完成 {task.streak} 次</span>}</div>
+            {task.identity && <small className="identity-note">身份：{task.identity}</small>}
             {task.habitCue && <small className="habit-note">提示：在「{task.habitCue}」之後</small>}
             {task.tinyStart && <small className="habit-note">兩分鐘開始：{task.tinyStart}</small>}
+            {task.recoveryDue && <small className="recovery-note">上一回尚未完成；這次先做兩分鐘版本，避免連續錯過兩次。</small>}
           </div>
           <div className="task-actions">
             <button className="edit-button" type="button" onClick={() => beginTaskEdit(task)} aria-label={`編輯：${task.text}`} disabled={!isReady}>編</button>
@@ -491,7 +574,7 @@ export default function Daybook({ userName }: { userName: string }) {
                       <label><span>重複週期</span><select value={repeatUnit} onChange={(event) => setRepeatUnit(event.target.value as RepeatUnit)}><option value="">不重複</option><option value="day">按天</option><option value="week">按週</option><option value="month">按月</option></select></label>
                       {repeatUnit && <><label><span>每隔</span><input type="number" min={1} max={365} value={repeatInterval} onChange={(event) => setRepeatInterval(Number(event.target.value))} /></label><label><span>結束方式</span><select value={repeatEndMode} onChange={(event) => setRepeatEndMode(event.target.value as 'count' | 'date')}><option value="count">出現次數</option><option value="date">結束日期</option></select></label>{repeatEndMode === 'count' ? <label><span>總次數（含本次）</span><input type="number" min={2} max={365} value={repeatCount} onChange={(event) => setRepeatCount(Number(event.target.value))} /></label> : <label><span>重複到</span><input type="date" min={shiftDate(selectedDate, 1)} value={repeatUntil} onChange={(event) => setRepeatUntil(event.target.value)} /></label>}</>}
                     </div>
-                    <div className="habit-fields"><label><span>習慣提示（選填）</span><input value={habitCue} maxLength={300} onChange={(event) => setHabitCue(event.target.value)} placeholder="例如：泡好早上第一杯咖啡" /></label><label><span>兩分鐘版本（選填）</span><input value={tinyStart} maxLength={300} onChange={(event) => setTinyStart(event.target.value)} placeholder="例如：只打開題目並寫下輸入輸出" /></label></div>
+                    <div className="habit-fields"><label><span>身份型習慣（選填）</span><input value={identity} maxLength={300} onChange={(event) => setIdentity(event.target.value)} placeholder="例如：成為持續精進的工程師" /></label><label><span>習慣提示（選填）</span><input value={habitCue} maxLength={300} onChange={(event) => setHabitCue(event.target.value)} placeholder="例如：泡好早上第一杯咖啡" /></label><label><span>兩分鐘版本（選填）</span><input value={tinyStart} maxLength={300} onChange={(event) => setTinyStart(event.target.value)} placeholder="例如：只打開題目並寫下輸入輸出" /></label></div>
                   </details>
                   {taskMessage && <p className={syncStatus === 'error' ? 'task-message error' : 'task-message'}>{taskMessage}</p>}
                 </div>

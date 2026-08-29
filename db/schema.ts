@@ -76,6 +76,7 @@ export const tasks = sqliteTable(
     recurrenceId: text('recurrence_id'),
     habitCue: text('habit_cue'),
     tinyStart: text('tiny_start'),
+    identity: text('identity'),
     position: integer('position').notNull(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),

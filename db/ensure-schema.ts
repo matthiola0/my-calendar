@@ -98,6 +98,7 @@ async function initializeSchema(db: D1Database) {
             recurrence_id TEXT,
             habit_cue TEXT,
             tiny_start TEXT,
+            identity TEXT,
             position INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
@@ -235,6 +236,9 @@ async function initializeSchema(db: D1Database) {
   if (!taskColumns.results.some((column) => column.name === 'tiny_start')) {
     await db.prepare('ALTER TABLE tasks ADD COLUMN tiny_start TEXT').run();
   }
+  if (!taskColumns.results.some((column) => column.name === 'identity')) {
+    await db.prepare('ALTER TABLE tasks ADD COLUMN identity TEXT').run();
+  }
 
   const cycleColumns = await db
     .prepare('PRAGMA table_info(cycles)')
@@ -268,6 +272,7 @@ async function initializeSchema(db: D1Database) {
           recurrence_id TEXT,
           habit_cue TEXT,
           tiny_start TEXT,
+          identity TEXT,
           position INTEGER NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
@@ -277,9 +282,9 @@ async function initializeSchema(db: D1Database) {
       db.prepare(`
         INSERT INTO tasks_owner_scoped
           (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-           recurrence_id, habit_cue, tiny_start, position, created_at, updated_at)
+           recurrence_id, habit_cue, tiny_start, identity, position, created_at, updated_at)
         SELECT id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-          recurrence_id, habit_cue, tiny_start, position, created_at, updated_at
+          recurrence_id, habit_cue, tiny_start, identity, position, created_at, updated_at
         FROM tasks
       `),
       db.prepare('DROP TABLE tasks'),
