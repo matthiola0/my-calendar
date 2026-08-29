@@ -37,7 +37,7 @@
 - **帳號隔離與跨裝置同步**：支援 Google 或帳號密碼登入，每個帳號的內容彼此獨立。
 - **Agent 可操作**：授權後，本機 coding agent 可透過 CLI 讀寫同一份行事曆，不需直接接觸資料庫。
 
-![Daybook 設定早上、下午與晚上三個分段，並顯示兩個連結到大週期的任務](images/daily-sections.png)
+![Daybook 完整每日頁面顯示大週期任務、三個分段、習慣設計、生活紀錄、心得與 LeetCode 自訂紀錄](images/daily-workflow.png)
 
 ## 受到《原子習慣》啟發
 
@@ -47,8 +47,6 @@ Daybook 將 James Clear 習慣方法中的幾個概念變成可操作的規劃�
 - 明確記錄行動的觸發提示；
 - 用兩分鐘起步降低開始阻力；
 - 讓進度看得見，錯過一次後盡快回到節奏。
-
-![Daybook 的重複任務顯示身份、提示、兩分鐘起步與連續紀錄，旁邊是每日心得](images/habit-reflection.png)
 
 可閱讀官方的[《原子習慣》摘要](https://jamesclear.com/atomic-habits-summary)與[書籍介紹](https://jamesclear.com/atomic-habits)。Daybook 是獨立開源專案，與 James Clear 無合作或隸屬關係。
 

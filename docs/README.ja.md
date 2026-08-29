@@ -37,7 +37,7 @@ AI計画、長期サイクル、日々の習慣、振り返りを一つにした
 - **アカウント分離と端末同期**：Googleまたはユーザー名・パスワードでログインし、各アカウントの内容を独立して同期します。
 - **Agent対応**：認証済みのローカルCLIから、coding agentがデータベースへ直接触れずに同じカレンダーを操作できます。
 
-![Daybookで朝、午後、夜の3区分を設定し、長期サイクルに紐づく2件のタスクを表示した画面](images/daily-sections.png)
+![Daybookの一日全体に長期サイクルのタスク、3区分、習慣設計、活動記録、振り返り、LeetCodeカスタム記録を表示した画面](images/daily-workflow.png)
 
 ## 『Atomic Habits』からの着想
 
@@ -47,8 +47,6 @@ Daybookは、James Clearの習慣フレームワークの考え方を操作で�
 - 行動を始めるきっかけを明確にする；
 - 2分の最初の行動で始める抵抗を下げる；
 - 進捗を見えるようにし、一度休んだ後は早く戻る。
-
-![Daybookの繰り返しタスクにアイデンティティ、きっかけ、2分版、連続記録が表示され、隣に日次リフレクションがある画面](images/habit-reflection.png)
 
 公式の[Atomic Habits要約](https://jamesclear.com/atomic-habits-summary)と[書籍紹介](https://jamesclear.com/atomic-habits)も参照できます。Daybookは独立したオープンソースプロジェクトで、James Clearとの提携関係はありません。
 
