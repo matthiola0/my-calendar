@@ -10,6 +10,8 @@ type Task = {
   id: string;
   text: string;
   done: boolean;
+  cycleId: string | null;
+  phaseId: string | null;
 };
 
 type DayEntry = {
@@ -23,6 +25,8 @@ type TaskRow = {
   id: string;
   text: string;
   done: number;
+  cycleId: string | null;
+  phaseId: string | null;
 };
 
 export async function GET(request: Request) {
@@ -42,7 +46,8 @@ export async function GET(request: Request) {
     .first<{ activity: string; reflection: string; revision: string }>();
   const taskRows = await db
     .prepare(
-      'SELECT id, text, done FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC',
+      `SELECT id, text, done, cycle_id AS cycleId, phase_id AS phaseId
+       FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC`,
     )
     .bind(ownerId, date)
     .all<TaskRow>();
@@ -53,6 +58,8 @@ export async function GET(request: Request) {
         id: task.id,
         text: task.text,
         done: Boolean(task.done),
+        cycleId: task.cycleId,
+        phaseId: task.phaseId,
       })),
       activity: day?.activity ?? '',
       reflection: day?.reflection ?? '',
@@ -81,6 +88,9 @@ export async function PUT(request: Request) {
   const { date, entry } = parsed;
   await ensureSchema();
   const db = getDatabaseBinding();
+  if (!(await taskLinksAreValid(db, ownerId, entry.tasks))) {
+    return Response.json({ error: '綁定的大週期或階段不存在。' }, { status: 400 });
+  }
   const now = Date.now();
   const nextRevision = crypto.randomUUID();
   const dayMutation = entry.revision === null
@@ -124,8 +134,9 @@ export async function PUT(request: Request) {
     ...entry.tasks.map((task, position) =>
       db
         .prepare(`
-          INSERT INTO tasks (id, owner_id, date, text, done, position, created_at, updated_at)
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?
+          INSERT INTO tasks
+            (id, owner_id, date, text, done, cycle_id, phase_id, position, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE EXISTS (
             SELECT 1 FROM day_entries
             WHERE owner_id = ? AND date = ? AND revision = ?
@@ -137,6 +148,8 @@ export async function PUT(request: Request) {
           date,
           task.text,
           task.done ? 1 : 0,
+          task.cycleId,
+          task.phaseId,
           position,
           now,
           now,
@@ -184,6 +197,8 @@ function parseEntry(body: unknown):
       return { ok: false, error: '待辦項目格式不正確。' };
     }
     const task = rawTask as Record<string, unknown>;
+    const cycleId = task.cycleId === undefined ? null : task.cycleId;
+    const phaseId = task.phaseId === undefined ? null : task.phaseId;
     if (
       typeof task.id !== 'string' ||
       task.id.length < 1 ||
@@ -192,12 +207,21 @@ function parseEntry(body: unknown):
       typeof task.text !== 'string' ||
       task.text.trim().length < 1 ||
       task.text.length > 500 ||
-      typeof task.done !== 'boolean'
+      typeof task.done !== 'boolean' ||
+      (cycleId !== null && (typeof cycleId !== 'string' || cycleId.length < 1 || cycleId.length > 100)) ||
+      (phaseId !== null && (typeof phaseId !== 'string' || phaseId.length < 1 || phaseId.length > 100)) ||
+      (phaseId !== null && cycleId === null)
     ) {
       return { ok: false, error: '待辦項目內容不正確。' };
     }
     seenIds.add(task.id);
-    tasks.push({ id: task.id, text: task.text.trim(), done: task.done });
+    tasks.push({
+      id: task.id,
+      text: task.text.trim(),
+      done: task.done,
+      cycleId,
+      phaseId,
+    });
   }
 
   return {
@@ -210,6 +234,26 @@ function parseEntry(body: unknown):
       revision: candidate.revision,
     },
   };
+}
+
+async function taskLinksAreValid(db: D1Database, ownerId: string, tasks: Task[]) {
+  const linkedTasks = tasks.filter((task) => task.cycleId !== null);
+  if (linkedTasks.length === 0) return true;
+
+  const [cycleRows, phaseRows] = await Promise.all([
+    db.prepare('SELECT id FROM cycles WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
+    db
+      .prepare('SELECT id, cycle_id AS cycleId FROM cycle_phases WHERE owner_id = ?')
+      .bind(ownerId)
+      .all<{ id: string; cycleId: string }>(),
+  ]);
+  const cycleIds = new Set(cycleRows.results.map((cycle) => cycle.id));
+  const phaseCycles = new Map(phaseRows.results.map((phase) => [phase.id, phase.cycleId]));
+
+  return linkedTasks.every((task) =>
+    cycleIds.has(task.cycleId as string) &&
+    (task.phaseId === null || phaseCycles.get(task.phaseId) === task.cycleId),
+  );
 }
 
 function isValidDate(value: string) {

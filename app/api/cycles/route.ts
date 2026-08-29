@@ -18,6 +18,7 @@ type MacroCycle = {
   id: string;
   title: string;
   goal: string;
+  reward: string;
   startDate: string;
   endDate: string;
   status: 'active' | 'completed';
@@ -25,8 +26,15 @@ type MacroCycle = {
   phases: CyclePhase[];
 };
 
+type CycleProgress = {
+  completed: number;
+  total: number;
+  percentage: number;
+};
+
 type CycleRow = Omit<MacroCycle, 'phases' | 'revision'> & { revision: string };
 type PhaseRow = CyclePhase & { cycleId: string };
+type ProgressRow = { cycleId: string; completed: number; total: number };
 
 export async function GET(request: Request) {
   const ownerId = await getAuthorizedOwnerId(request);
@@ -34,10 +42,10 @@ export async function GET(request: Request) {
 
   await ensureSchema();
   const db = getDatabaseBinding();
-  const [cycleRows, phaseRows] = await Promise.all([
+  const [cycleRows, phaseRows, progressRows] = await Promise.all([
     db
       .prepare(`
-        SELECT id, title, goal, start_date AS startDate, end_date AS endDate,
+        SELECT id, title, goal, reward, start_date AS startDate, end_date AS endDate,
           status, revision
         FROM cycles
         WHERE owner_id = ?
@@ -55,6 +63,16 @@ export async function GET(request: Request) {
       `)
       .bind(ownerId)
       .all<PhaseRow>(),
+    db
+      .prepare(`
+        SELECT cycle_id AS cycleId, COUNT(*) AS total,
+          COALESCE(SUM(done), 0) AS completed
+        FROM tasks
+        WHERE owner_id = ? AND cycle_id IS NOT NULL
+        GROUP BY cycle_id
+      `)
+      .bind(ownerId)
+      .all<ProgressRow>(),
   ]);
 
   const phasesByCycle = new Map<string, CyclePhase[]>();
@@ -70,11 +88,27 @@ export async function GET(request: Request) {
     phasesByCycle.set(phase.cycleId, phases);
   }
 
+  const progressByCycle = new Map<string, CycleProgress>();
+  for (const progress of progressRows.results) {
+    progressByCycle.set(progress.cycleId, {
+      completed: progress.completed,
+      total: progress.total,
+      percentage: progress.total
+        ? Math.round((progress.completed / progress.total) * 100)
+        : 0,
+    });
+  }
+
   return Response.json(
     {
       cycles: cycleRows.results.map((cycle) => ({
         ...cycle,
         phases: phasesByCycle.get(cycle.id) ?? [],
+        progress: progressByCycle.get(cycle.id) ?? {
+          completed: 0,
+          total: 0,
+          percentage: 0,
+        },
       })),
     },
     { headers: { 'Cache-Control': 'no-store' } },
@@ -106,8 +140,8 @@ export async function PUT(request: Request) {
     ? db
       .prepare(`
         INSERT INTO cycles
-          (id, owner_id, title, goal, start_date, end_date, status, revision, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (id, owner_id, title, goal, reward, start_date, end_date, status, revision, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(owner_id, id) DO NOTHING
       `)
       .bind(
@@ -115,6 +149,7 @@ export async function PUT(request: Request) {
         ownerId,
         cycle.title,
         cycle.goal,
+        cycle.reward,
         cycle.startDate,
         cycle.endDate,
         cycle.status,
@@ -125,13 +160,14 @@ export async function PUT(request: Request) {
     : db
       .prepare(`
         UPDATE cycles SET
-          title = ?, goal = ?, start_date = ?, end_date = ?, status = ?,
+          title = ?, goal = ?, reward = ?, start_date = ?, end_date = ?, status = ?,
           revision = ?, updated_at = ?
         WHERE owner_id = ? AND id = ? AND revision = ?
       `)
       .bind(
         cycle.title,
         cycle.goal,
+        cycle.reward,
         cycle.startDate,
         cycle.endDate,
         cycle.status,
@@ -182,6 +218,28 @@ export async function PUT(request: Request) {
           nextRevision,
         ),
     ),
+    db
+      .prepare(`
+        UPDATE tasks SET phase_id = NULL, updated_at = ?
+        WHERE owner_id = ? AND cycle_id = ? AND phase_id IS NOT NULL
+          AND phase_id NOT IN (
+            SELECT id FROM cycle_phases WHERE owner_id = ? AND cycle_id = ?
+          )
+          AND EXISTS (
+            SELECT 1 FROM cycles
+            WHERE owner_id = ? AND id = ? AND revision = ?
+          )
+      `)
+      .bind(
+        now,
+        ownerId,
+        cycle.id,
+        ownerId,
+        cycle.id,
+        ownerId,
+        cycle.id,
+        nextRevision,
+      ),
   ];
 
   const results = await db.batch(statements);
@@ -203,6 +261,7 @@ function parseCycle(body: unknown):
   }
 
   const candidate = body as Record<string, unknown>;
+  const reward = candidate.reward === undefined ? '' : candidate.reward;
   if (
     typeof candidate.id !== 'string' ||
     candidate.id.length < 1 ||
@@ -213,6 +272,8 @@ function parseCycle(body: unknown):
     typeof candidate.goal !== 'string' ||
     candidate.goal.trim().length < 1 ||
     candidate.goal.length > 5_000 ||
+    typeof reward !== 'string' ||
+    reward.length > 1_000 ||
     typeof candidate.startDate !== 'string' ||
     typeof candidate.endDate !== 'string' ||
     !isValidDate(candidate.startDate) ||
@@ -270,6 +331,7 @@ function parseCycle(body: unknown):
       id: candidate.id,
       title: candidate.title.trim(),
       goal: candidate.goal.trim(),
+      reward: reward.trim(),
       startDate: candidate.startDate,
       endDate: candidate.endDate,
       status: candidate.status,

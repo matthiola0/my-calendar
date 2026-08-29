@@ -7,7 +7,17 @@ type Task = {
   id: string;
   text: string;
   done: boolean;
+  cycleId: string | null;
+  phaseId: string | null;
 };
+
+type CycleOption = {
+  id: string;
+  title: string;
+  phases: Array<{ id: string; title: string }>;
+};
+
+type TaskDraft = Pick<Task, 'id' | 'text' | 'cycleId' | 'phaseId'>;
 
 type DayEntry = {
   tasks: Task[];
@@ -45,6 +55,34 @@ function shiftDate(key: string, amount: number) {
   return dateKey(date);
 }
 
+function taskLinkValue(cycleId: string | null, phaseId: string | null) {
+  return cycleId ? `${cycleId}::${phaseId ?? ''}` : '';
+}
+
+function parseTaskLink(value: string) {
+  if (!value) return { cycleId: null, phaseId: null };
+  const [cycleId, phaseId] = value.split('::');
+  return { cycleId, phaseId: phaseId || null };
+}
+
+function CycleLinkOptions({ cycles }: { cycles: CycleOption[] }) {
+  return (
+    <>
+      <option value="">不綁定大週期</option>
+      {cycles.flatMap((cycle) => [
+        <option key={cycle.id} value={taskLinkValue(cycle.id, null)}>
+          {cycle.title}（整體）
+        </option>,
+        ...cycle.phases.map((phase) => (
+          <option key={phase.id} value={taskLinkValue(cycle.id, phase.id)}>
+            {cycle.title} · {phase.title}
+          </option>
+        )),
+      ])}
+    </>
+  );
+}
+
 async function readEntry(date: string, signal?: AbortSignal): Promise<DayEntry> {
   const response = await fetch(`/api/entries?date=${encodeURIComponent(date)}`, {
     cache: 'no-store',
@@ -70,7 +108,9 @@ export default function Daybook({ userName }: { userName: string }) {
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});
   const [taskText, setTaskText] = useState('');
-  const [editingTask, setEditingTask] = useState<{ id: string; text: string } | null>(null);
+  const [taskLink, setTaskLink] = useState('');
+  const [cycles, setCycles] = useState<CycleOption[]>([]);
+  const [editingTask, setEditingTask] = useState<TaskDraft | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('loading');
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDraftRef = useRef<{ date: string; entry: DayEntry } | null>(null);
@@ -102,6 +142,20 @@ export default function Daybook({ userName }: { userName: string }) {
     load();
     return () => controller.abort();
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (view !== 'daily') return;
+    let active = true;
+    fetch('/api/cycles', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((result: { cycles: CycleOption[] }) => {
+        if (active) setCycles(result.cycles);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [view]);
 
   const entry = entries[selectedDate] ?? emptyEntry;
   const selected = fromDateKey(selectedDate);
@@ -184,15 +238,36 @@ export default function Daybook({ userName }: { userName: string }) {
     event.preventDefault();
     const text = taskText.trim();
     if (!text) return;
+    const link = parseTaskLink(taskLink);
 
     updateEntry(
       (current) => ({
         ...current,
-        tasks: [...current.tasks, { id: crypto.randomUUID(), text, done: false }],
+        tasks: [
+          ...current.tasks,
+          { id: crypto.randomUUID(), text, done: false, ...link },
+        ],
       }),
       true,
     );
     setTaskText('');
+  };
+
+  const beginTaskEdit = (task: Task) => {
+    setEditingTask({
+      id: task.id,
+      text: task.text,
+      cycleId: task.cycleId,
+      phaseId: task.phaseId,
+    });
+  };
+
+  const taskCycleLabel = (task: Task) => {
+    if (!task.cycleId) return null;
+    const cycle = cycles.find((item) => item.id === task.cycleId);
+    if (!cycle) return null;
+    const phase = cycle.phases.find((item) => item.id === task.phaseId);
+    return phase ? `${cycle.title} · ${phase.title}` : cycle.title;
   };
 
   const toggleTask = (id: string) => {
@@ -226,7 +301,14 @@ export default function Daybook({ userName }: { userName: string }) {
       (current) => ({
         ...current,
         tasks: current.tasks.map((task) =>
-          task.id === editingTask.id ? { ...task, text } : task,
+          task.id === editingTask.id
+            ? {
+                ...task,
+                text,
+                cycleId: editingTask.cycleId,
+                phaseId: editingTask.phaseId,
+              }
+            : task,
         ),
       }),
       true,
@@ -249,6 +331,10 @@ export default function Daybook({ userName }: { userName: string }) {
     window.location.replace('/');
   };
 
+  const showCycles = () => {
+    void flushPendingSave().then(() => setView('cycles'));
+  };
+
   return (
     <main className="daybook-shell">
       <header className="site-header">
@@ -262,7 +348,7 @@ export default function Daybook({ userName }: { userName: string }) {
         <div className="header-meta">
           <div className="view-switch" aria-label="週期檢視">
             <button type="button" className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>小週期 · 每日</button>
-            <button type="button" className={view === 'cycles' ? 'active' : ''} onClick={() => setView('cycles')}>大週期</button>
+            <button type="button" className={view === 'cycles' ? 'active' : ''} onClick={showCycles}>大週期</button>
           </div>
           {view === 'daily' && (
             <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status">
@@ -341,15 +427,21 @@ export default function Daybook({ userName }: { userName: string }) {
           </div>
 
           <form className="task-form" onSubmit={addTask}>
-            <label className="sr-only" htmlFor="new-task">新增待辦事項</label>
-            <input
-              id="new-task"
-              value={taskText}
-              onChange={(event) => setTaskText(event.target.value)}
-              placeholder="寫下接下來要做的事…"
-              autoComplete="off"
-              disabled={!isReady}
-            />
+            <div className="task-create-fields">
+              <label className="sr-only" htmlFor="new-task">新增待辦事項</label>
+              <input
+                id="new-task"
+                value={taskText}
+                onChange={(event) => setTaskText(event.target.value)}
+                placeholder="寫下接下來要做的事…"
+                autoComplete="off"
+                disabled={!isReady}
+              />
+              <label className="sr-only" htmlFor="new-task-cycle">綁定大週期</label>
+              <select id="new-task-cycle" value={taskLink} onChange={(event) => setTaskLink(event.target.value)} disabled={!isReady}>
+                <CycleLinkOptions cycles={cycles} />
+              </select>
+            </div>
             <button type="submit" aria-label="加入待辦" disabled={!isReady}>＋</button>
           </form>
 
@@ -376,33 +468,48 @@ export default function Daybook({ userName }: { userName: string }) {
                   <span className="task-index">{String(index + 1).padStart(2, '0')}</span>
                   {editingTask?.id === task.id ? (
                     <form className="task-edit-form" onSubmit={saveTaskEdit}>
-                      <input
-                        value={editingTask.text}
-                        onChange={(event) => setEditingTask({ id: task.id, text: event.target.value })}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Escape') setEditingTask(null);
-                        }}
-                        aria-label={`編輯待辦：${task.text}`}
-                        maxLength={500}
-                        autoFocus
-                      />
+                      <div className="task-edit-fields">
+                        <input
+                          value={editingTask.text}
+                          onChange={(event) => setEditingTask((current) => current ? { ...current, text: event.target.value } : current)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') setEditingTask(null);
+                          }}
+                          aria-label={`編輯待辦：${task.text}`}
+                          maxLength={500}
+                          autoFocus
+                        />
+                        <select
+                          value={taskLinkValue(editingTask.cycleId, editingTask.phaseId)}
+                          onChange={(event) => {
+                            const link = parseTaskLink(event.target.value);
+                            setEditingTask((current) => current ? { ...current, ...link } : current);
+                          }}
+                          aria-label="綁定大週期"
+                        >
+                          <CycleLinkOptions cycles={cycles} />
+                        </select>
+                      </div>
                       <button className="save-task-edit" type="submit" disabled={!editingTask.text.trim() || !isReady}>儲存</button>
                       <button className="cancel-task-edit" type="button" onClick={() => setEditingTask(null)}>取消</button>
                     </form>
                   ) : (
                     <>
-                      <button
-                        className="task-text-button"
-                        type="button"
-                        onClick={() => setEditingTask({ id: task.id, text: task.text })}
-                        aria-label={`編輯待辦：${task.text}`}
-                        title="點擊編輯"
-                        disabled={!isReady}
-                      >
-                        {task.text}
-                      </button>
+                      <div className="task-copy">
+                        <button
+                          className="task-text-button"
+                          type="button"
+                          onClick={() => beginTaskEdit(task)}
+                          aria-label={`編輯待辦：${task.text}`}
+                          title="點擊編輯"
+                          disabled={!isReady}
+                        >
+                          {task.text}
+                        </button>
+                        {taskCycleLabel(task) && <span className="task-cycle-label">↳ {taskCycleLabel(task)}</span>}
+                      </div>
                       <div className="task-actions">
-                        <button className="edit-button" type="button" onClick={() => setEditingTask({ id: task.id, text: task.text })} aria-label={`編輯：${task.text}`} disabled={!isReady}>編</button>
+                        <button className="edit-button" type="button" onClick={() => beginTaskEdit(task)} aria-label={`編輯：${task.text}`} disabled={!isReady}>編</button>
                         <button className="delete-button" type="button" onClick={() => deleteTask(task.id)} aria-label={`刪除：${task.text}`} disabled={!isReady}>×</button>
                       </div>
                     </>

@@ -92,6 +92,8 @@ async function initializeSchema(db: D1Database) {
             date TEXT NOT NULL,
             text TEXT NOT NULL,
             done INTEGER NOT NULL DEFAULT 0,
+            cycle_id TEXT,
+            phase_id TEXT,
             position INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
@@ -108,6 +110,7 @@ async function initializeSchema(db: D1Database) {
             owner_id TEXT NOT NULL,
             title TEXT NOT NULL,
             goal TEXT NOT NULL,
+            reward TEXT NOT NULL DEFAULT '',
             start_date TEXT NOT NULL,
             end_date TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
@@ -166,6 +169,22 @@ async function initializeSchema(db: D1Database) {
   const taskColumns = await db
     .prepare('PRAGMA table_info(tasks)')
     .all<{ name: string; pk: number }>();
+  if (!taskColumns.results.some((column) => column.name === 'cycle_id')) {
+    await db.prepare('ALTER TABLE tasks ADD COLUMN cycle_id TEXT').run();
+  }
+  if (!taskColumns.results.some((column) => column.name === 'phase_id')) {
+    await db.prepare('ALTER TABLE tasks ADD COLUMN phase_id TEXT').run();
+  }
+
+  const cycleColumns = await db
+    .prepare('PRAGMA table_info(cycles)')
+    .all<{ name: string }>();
+  if (!cycleColumns.results.some((column) => column.name === 'reward')) {
+    await db
+      .prepare("ALTER TABLE cycles ADD COLUMN reward TEXT NOT NULL DEFAULT ''")
+      .run();
+  }
+
   const ownerPrimaryKey = taskColumns.results.find(
     (column) => column.name === 'owner_id',
   )?.pk;
@@ -183,6 +202,8 @@ async function initializeSchema(db: D1Database) {
           date TEXT NOT NULL,
           text TEXT NOT NULL,
           done INTEGER NOT NULL DEFAULT 0,
+          cycle_id TEXT,
+          phase_id TEXT,
           position INTEGER NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
@@ -191,8 +212,8 @@ async function initializeSchema(db: D1Database) {
       `),
       db.prepare(`
         INSERT INTO tasks_owner_scoped
-          (id, owner_id, date, text, done, position, created_at, updated_at)
-        SELECT id, owner_id, date, text, done, position, created_at, updated_at
+          (id, owner_id, date, text, done, cycle_id, phase_id, position, created_at, updated_at)
+        SELECT id, owner_id, date, text, done, cycle_id, phase_id, position, created_at, updated_at
         FROM tasks
       `),
       db.prepare('DROP TABLE tasks'),
@@ -203,6 +224,13 @@ async function initializeSchema(db: D1Database) {
       `),
     ]);
   }
+
+  await db
+    .prepare(`
+      CREATE INDEX IF NOT EXISTS idx_tasks_owner_cycle_done
+      ON tasks (owner_id, cycle_id, done)
+    `)
+    .run();
 
   await db.prepare('PRAGMA optimize').run();
 }

@@ -14,11 +14,17 @@ type MacroCycle = {
   id: string;
   title: string;
   goal: string;
+  reward: string;
   startDate: string;
   endDate: string;
   status: 'active' | 'completed';
   revision: string | null;
   phases: CyclePhase[];
+  progress: {
+    completed: number;
+    total: number;
+    percentage: number;
+  };
 };
 
 function dateKey(date: Date) {
@@ -73,11 +79,13 @@ export default function Cycles() {
       id: crypto.randomUUID(),
       title: '',
       goal: '',
+      reward: '',
       startDate: dateKey(start),
       endDate: dateKey(end),
       status: 'active',
       revision: null,
       phases: [],
+      progress: { completed: 0, total: 0, percentage: 0 },
     });
     setMessage('');
   };
@@ -143,7 +151,7 @@ export default function Cycles() {
     const phases = cycle.phases
       .map((phase) => `- ${phase.startDate}～${phase.endDate}｜${phase.title}：${phase.description}`)
       .join('\n');
-    const prompt = `請依照這個大週期，先讀取日期內既有行事曆，再把每個階段拆成可完成的每日待辦。保留原有事項，控制每天工作量，並在排完後讀回確認。\n\n大週期：${cycle.title}\n日期：${cycle.startDate}～${cycle.endDate}\n目標：${cycle.goal}\n階段：\n${phases || '- 尚未設定，請先協助拆分階段'}`;
+    const prompt = `請依照這個大週期，先讀取日期內既有行事曆，再把每個階段拆成可完成的每日待辦，並將新增任務綁定到對應的大週期與階段。保留原有事項，控制每天工作量，並在排完後讀回確認。\n\n大週期：${cycle.title}\n日期：${cycle.startDate}～${cycle.endDate}\n目標：${cycle.goal}\n完成獎勵：${cycle.reward || '尚未設定'}\n階段：\n${phases || '- 尚未設定，請先協助拆分階段'}`;
     await navigator.clipboard.writeText(prompt);
     setMessage('AI 拆解指令已複製；貼到你的 AI 對話即可。');
   };
@@ -187,6 +195,10 @@ export default function Cycles() {
             <label className="wide-field">
               <span>這個週期完成時，我想成為什麼狀態？</span>
               <textarea required maxLength={5000} value={draft.goal} onChange={(event) => updateDraft('goal', event.target.value)} placeholder="寫結果，不只寫想做的事。" />
+            </label>
+            <label className="wide-field">
+              <span>完成後，怎麼獎勵自己？</span>
+              <input maxLength={1000} value={draft.reward} onChange={(event) => updateDraft('reward', event.target.value)} placeholder="例如：安排一天小旅行，或買一本期待已久的書。" />
             </label>
             <label>
               <span>狀態</span>
@@ -256,6 +268,21 @@ export default function Cycles() {
                   <p className="cycle-goal">{cycle.goal}</p>
                 </div>
                 <span className={cycle.status === 'completed' ? 'cycle-status completed' : 'cycle-status'}>{cycle.status === 'completed' ? '已完成' : '進行中'}</span>
+              </div>
+
+              <div className="cycle-progress" aria-label={`大週期進度 ${cycle.progress.percentage}%`}>
+                <div className="cycle-progress-heading">
+                  <strong>{cycle.progress.percentage}%</strong>
+                  <span>{cycle.progress.total ? `${cycle.progress.completed} / ${cycle.progress.total} 個小週期任務完成` : '尚未綁定小週期任務'}</span>
+                </div>
+                <div className="cycle-progress-track" aria-hidden="true">
+                  <i style={{ width: `${cycle.progress.percentage}%` }} />
+                </div>
+              </div>
+
+              <div className={cycle.reward ? 'cycle-reward' : 'cycle-reward empty'}>
+                <strong>完成獎勵</strong>
+                <p>{cycle.reward || '還沒設定。替完成目標的自己留一份期待。'}</p>
               </div>
 
               <ol className="phase-timeline">

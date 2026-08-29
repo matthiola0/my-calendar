@@ -70,6 +70,8 @@ export const tasks = sqliteTable(
     date: text('date').notNull(),
     text: text('text').notNull(),
     done: integer('done', { mode: 'boolean' }).notNull().default(false),
+    cycleId: text('cycle_id'),
+    phaseId: text('phase_id'),
     position: integer('position').notNull(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
@@ -81,6 +83,11 @@ export const tasks = sqliteTable(
       table.date,
       table.position,
     ),
+    index('idx_tasks_owner_cycle_done').on(
+      table.ownerId,
+      table.cycleId,
+      table.done,
+    ),
   ],
 );
 
@@ -91,6 +98,7 @@ export const cycles = sqliteTable(
     ownerId: text('owner_id').notNull(),
     title: text('title').notNull(),
     goal: text('goal').notNull(),
+    reward: text('reward').notNull().default(''),
     startDate: text('start_date').notNull(),
     endDate: text('end_date').notNull(),
     status: text('status').notNull().default('active'),

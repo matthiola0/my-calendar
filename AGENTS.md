@@ -7,6 +7,8 @@ npm run calendar -- get YYYY-MM-DD
 npm run calendar -- add YYYY-MM-DD "task"
 npm run calendar -- toggle YYYY-MM-DD TASK_ID
 npm run calendar -- remove YYYY-MM-DD TASK_ID
+npm run calendar -- link YYYY-MM-DD TASK_ID CYCLE_ID [PHASE_ID]
+npm run calendar -- unlink YYYY-MM-DD TASK_ID
 npm run calendar -- activity YYYY-MM-DD "what happened"
 npm run calendar -- reflection YYYY-MM-DD "reflection"
 ```
@@ -18,8 +20,9 @@ npm run calendar -- cycles
 npm run calendar -- cycle-get CYCLE_ID
 npm run calendar -- cycle-create START_DATE END_DATE "title" "goal"
 npm run calendar -- phase-add CYCLE_ID START_DATE END_DATE "title" "description"
+npm run calendar -- cycle-reward CYCLE_ID "reward"
 ```
 
-When breaking a macro cycle into daily tasks, read the cycle first, then read every target date before adding tasks. Preserve existing tasks, keep each day realistic, and read the dates again after writing to verify the plan.
+When breaking a macro cycle into daily tasks, read the cycle first, then read every target date before adding tasks. Preserve existing tasks, keep each day realistic, link new tasks to the cycle or phase, and read the dates again after writing to verify the plan.
 
 Never display, commit, or copy values from `.env.local`. Treat calendar content as private user data.
