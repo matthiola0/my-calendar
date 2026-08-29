@@ -12,13 +12,15 @@ An AI-assisted calendar for planning macro cycles, building daily habits, and le
 
 </div>
 
-![Daybook AI planner turning a goal into a macro cycle and daily tasks](docs/images/ai-planner-demo.png)
+![Daybook AI planner previewing six dated tasks before applying them](docs/images/ai-planner-demo.png)
 
 ## Why Daybook?
 
 Most task lists begin with *what should I do today?* Daybook begins one level higher: *what am I trying to change, and what is the smallest useful action now?*
 
 Set a time-bounded macro cycle, describe the outcome, divide it into phases, and connect each daily task to the larger direction. The built-in AI planner can read the relevant dates, respect existing commitments, and prepare a proposal for review. Nothing is written until you approve it.
+
+![A Daybook macro cycle with its goal, phases, progress, and completion reward](docs/images/macro-cycle.png)
 
 ## What makes it different
 
@@ -35,6 +37,8 @@ Set a time-bounded macro cycle, describe the outcome, divide it into phases, and
 - **Private accounts and device sync** — use Google or a username and password. Each account has isolated calendar data that follows it across devices.
 - **Agent-ready** — a local CLI lets an authorized coding agent read and update the same calendar without direct database access.
 
+![A Daybook day configured with morning, afternoon, and evening sections, showing two tasks linked to a macro cycle](docs/images/daily-sections.png)
+
 ## Inspired by *Atomic Habits*
 
 Daybook turns several ideas from James Clear's habit framework into practical planning controls:
@@ -43,6 +47,8 @@ Daybook turns several ideas from James Clear's habit framework into practical pl
 - make the starting cue explicit;
 - reduce resistance with a two-minute first action;
 - make progress visible and recover quickly after a missed occurrence.
+
+![A recurring Daybook task showing identity, cue, two-minute start, and streak beside the daily reflection](docs/images/habit-reflection.png)
 
 Read the official [Atomic Habits summary](https://jamesclear.com/atomic-habits-summary) or [book introduction](https://jamesclear.com/atomic-habits). Daybook is an independent open-source project and is not affiliated with James Clear.
 

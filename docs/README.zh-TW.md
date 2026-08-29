@@ -12,13 +12,15 @@
 
 </div>
 
-![Daybook AI 規劃器將目標拆成大週期與每日任務](images/ai-planner-demo.png)
+![Daybook AI 規劃器預覽六個有日期的任務，確認後才套用](images/ai-planner-demo.png)
 
 ## 為什麼是 Daybook？
 
 一般待辦清單從「今天要做什麼？」開始；Daybook 會先問：「我想改變什麼，而現在最小、最有用的行動是什麼？」
 
 先設定有期限的大週期與成果，拆成階段，再把每日任務連回同一個方向。內建 AI 只讀取必要日期、保留既有安排，先產生可檢查的提案；得到你的確認後才會寫入。
+
+![Daybook 大週期顯示目標、階段、進度與完成獎勵](images/macro-cycle.png)
 
 ## 特色
 
@@ -35,6 +37,8 @@
 - **帳號隔離與跨裝置同步**：支援 Google 或帳號密碼登入，每個帳號的內容彼此獨立。
 - **Agent 可操作**：授權後，本機 coding agent 可透過 CLI 讀寫同一份行事曆，不需直接接觸資料庫。
 
+![Daybook 設定早上、下午與晚上三個分段，並顯示兩個連結到大週期的任務](images/daily-sections.png)
+
 ## 受到《原子習慣》啟發
 
 Daybook 將 James Clear 習慣方法中的幾個概念變成可操作的規劃欄位：
@@ -43,6 +47,8 @@ Daybook 將 James Clear 習慣方法中的幾個概念變成可操作的規劃�
 - 明確記錄行動的觸發提示；
 - 用兩分鐘起步降低開始阻力；
 - 讓進度看得見，錯過一次後盡快回到節奏。
+
+![Daybook 的重複任務顯示身份、提示、兩分鐘起步與連續紀錄，旁邊是每日心得](images/habit-reflection.png)
 
 可閱讀官方的[《原子習慣》摘要](https://jamesclear.com/atomic-habits-summary)與[書籍介紹](https://jamesclear.com/atomic-habits)。Daybook 是獨立開源專案，與 James Clear 無合作或隸屬關係。
 
