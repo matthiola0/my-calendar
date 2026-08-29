@@ -2,10 +2,12 @@
 
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
+import { useI18n } from '../lib/i18n';
 
 type Mode = 'login' | 'register';
 
 export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -17,7 +19,7 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
     event.preventDefault();
     setError('');
     if (mode === 'register' && password !== confirmPassword) {
-      setError('兩次輸入的密碼不一致。');
+      setError(t('authPasswordMismatch'));
       return;
     }
 
@@ -28,14 +30,20 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-      const result = (await response.json()) as { error?: string };
+      await response.json();
       if (!response.ok) {
-        setError(result.error ?? '暫時無法登入，請稍後再試。');
+        setError(response.status === 409
+          ? t('authTaken')
+          : response.status === 401
+            ? t('authCredentials')
+            : response.status === 400
+              ? t('authInvalidFormat')
+              : t('authUnavailable'));
         return;
       }
       window.location.replace('/');
     } catch {
-      setError('連線失敗，請檢查網路後再試。');
+      setError(t('authNetworkError'));
     } finally {
       setSubmitting(false);
     }
@@ -51,48 +59,48 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
   return (
     <main className="auth-shell">
       <section className="auth-intro">
-        <Link className="brand auth-brand" href="/" aria-label="日常首頁">
-          <span className="brand-mark" aria-hidden="true">日</span>
+        <Link className="brand auth-brand" href="/" aria-label={t('brandHome')}>
+          <span className="brand-mark" aria-hidden="true">{t('brandMark')}</span>
           <span>
-            <strong>日常</strong>
+            <strong>{t('brandName')}</strong>
             <small>DAILY NOTES</small>
           </span>
         </Link>
         <div>
-          <p className="eyebrow">大目標拆小 · 小行動成習慣</p>
-          <h1>把想做到的事，<br />拆成今天能開始的一小步。</h1>
+          <p className="eyebrow">{t('authEyebrow')}</p>
+          <h1>{t('authHeadline1')}<br />{t('authHeadline2')}</h1>
           <p className="auth-description">
-            讓 AI 協助規劃、回顧與調整，用每天做得到的小任務，慢慢累積真正的改變。
+            {t('authDescription')}
           </p>
         </div>
-        <p className="auth-footnote">SMALL STEPS · AI GUIDED · LASTING CHANGE</p>
+        <p className="auth-footnote">{t('authFootnote')}</p>
       </section>
 
       <section className="auth-panel" aria-labelledby="auth-title">
         <div className="auth-card">
-          <div className="auth-tabs" role="tablist" aria-label="登入或註冊">
-            <button type="button" role="tab" aria-selected={mode === 'login'} onClick={() => switchMode('login')}>登入</button>
-            <button type="button" role="tab" aria-selected={mode === 'register'} onClick={() => switchMode('register')}>註冊</button>
+          <div className="auth-tabs" role="tablist" aria-label={t('authTabsLabel')}>
+            <button type="button" role="tab" aria-selected={mode === 'login'} onClick={() => switchMode('login')}>{t('authLogin')}</button>
+            <button type="button" role="tab" aria-selected={mode === 'register'} onClick={() => switchMode('register')}>{t('authRegister')}</button>
           </div>
 
           <div className="auth-heading">
             <p className="section-number">WELCOME</p>
-            <h2 id="auth-title">{mode === 'login' ? '歡迎回來' : '建立你的日常'}</h2>
-            <p>{mode === 'login' ? '選擇一種方式，繼續寫今天這一頁。' : '註冊後即可在不同裝置同步你的內容。'}</p>
+            <h2 id="auth-title">{mode === 'login' ? t('authWelcome') : t('authCreateTitle')}</h2>
+            <p>{mode === 'login' ? t('authLoginDescription') : t('authRegisterDescription')}</p>
           </div>
 
           {googleEnabled && (
             <a className="google-login" href="/api/auth/google">
               <span aria-hidden="true">G</span>
-              使用 Google 帳號登入
+              {t('authGoogle')}
             </a>
           )}
 
-          <div className="auth-divider"><span>或使用帳號密碼</span></div>
+          <div className="auth-divider"><span>{t('authDivider')}</span></div>
 
           <form className="auth-form" onSubmit={submit}>
             <label>
-              <span>帳號</span>
+              <span>{t('authUsername')}</span>
               <input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
@@ -100,12 +108,12 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
                 minLength={3}
                 maxLength={30}
                 pattern="[A-Za-z0-9_.-]+"
-                placeholder="3–30 個英數字、_ 或 -"
+                placeholder={t('authUsernamePlaceholder')}
                 required
               />
             </label>
             <label>
-              <span>密碼</span>
+              <span>{t('authPassword')}</span>
               <input
                 type="password"
                 value={password}
@@ -113,13 +121,13 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 minLength={10}
                 maxLength={128}
-                placeholder="至少 10 個字元"
+                placeholder={t('authPasswordPlaceholder')}
                 required
               />
             </label>
             {mode === 'register' && (
               <label>
-                <span>確認密碼</span>
+                <span>{t('authConfirmPassword')}</span>
                 <input
                   type="password"
                   value={confirmPassword}
@@ -127,20 +135,20 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
                   autoComplete="new-password"
                   minLength={10}
                   maxLength={128}
-                  placeholder="再輸入一次密碼"
+                  placeholder={t('authConfirmPlaceholder')}
                   required
                 />
               </label>
             )}
             {error && <p className="auth-error" role="alert">{error}</p>}
             <button className="auth-submit" type="submit" disabled={submitting}>
-              {submitting ? '請稍候…' : mode === 'login' ? '登入我的行事曆' : '註冊並開始使用'}
+              {submitting ? t('authPleaseWait') : mode === 'login' ? t('authLoginButton') : t('authRegisterButton')}
             </button>
           </form>
 
           <p className="auth-privacy">
-            你的待辦、紀錄與心得不會與其他使用者共用。<br />
-            <Link href="/privacy">查看隱私權政策</Link>
+            {t('authPrivacy1')}<br />
+            <Link href="/privacy">{t('authPrivacyLink')}</Link>
           </p>
         </div>
       </section>

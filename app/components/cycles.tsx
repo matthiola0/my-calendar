@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import { useI18n } from '@/app/lib/i18n';
 
 type CyclePhase = {
   id: string;
@@ -34,9 +35,9 @@ function dateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function displayDate(value: string) {
+function displayDate(value: string, locale: string) {
   const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day, 12).toLocaleDateString('zh-TW', {
+  return new Date(year, month - 1, day, 12).toLocaleDateString(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -50,6 +51,7 @@ async function readCycles() {
 }
 
 export default function Cycles() {
+  const { locale, t } = useI18n();
   const [cycles, setCycles] = useState<MacroCycle[]>([]);
   const [draft, setDraft] = useState<MacroCycle | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
@@ -133,38 +135,44 @@ export default function Cycles() {
         body: JSON.stringify(draft),
       });
       if (!response.ok) {
-        const result = await response.json() as { error?: string };
-        throw new Error(result.error ?? '儲存失敗。');
+        throw new Error(t('saveFailed'));
       }
       const result = await readCycles();
       setCycles(result.cycles);
       setDraft(null);
       setStatus('ready');
-      setMessage('大週期已同步至雲端。');
+      setMessage(t('cycleSaved'));
     } catch (error) {
       setStatus('error');
-      setMessage(error instanceof Error ? error.message : '儲存失敗。');
+      setMessage(error instanceof Error ? error.message : t('saveFailed'));
     }
   };
 
   const copyAiPrompt = async (cycle: MacroCycle) => {
     const phases = cycle.phases
-      .map((phase) => `- ${phase.startDate}～${phase.endDate}｜${phase.title}：${phase.description}`)
+      .map((phase) => `- ${phase.startDate}–${phase.endDate} | ${phase.title}: ${phase.description}`)
       .join('\n');
-    const prompt = `請依照這個大週期，先讀取日期內既有行事曆，再把每個階段拆成可完成的每日待辦，並將新增任務綁定到對應的大週期與階段。保留原有事項，控制每天工作量，並在排完後讀回確認。\n\n大週期：${cycle.title}\n日期：${cycle.startDate}～${cycle.endDate}\n目標：${cycle.goal}\n完成獎勵：${cycle.reward || '尚未設定'}\n階段：\n${phases || '- 尚未設定，請先協助拆分階段'}`;
+    const prompt = t('cycleAiPrompt', {
+      title: cycle.title,
+      startDate: cycle.startDate,
+      endDate: cycle.endDate,
+      goal: cycle.goal,
+      reward: cycle.reward || t('notSet'),
+      phases: phases || t('phasesNotSet'),
+    });
     await navigator.clipboard.writeText(prompt);
-    setMessage('AI 拆解指令已複製；貼到你的 AI 對話即可。');
+    setMessage(t('aiPromptCopied'));
   };
 
   return (
     <div className="cycles-view" id="top">
       <section className="cycles-hero">
         <div>
-          <p className="eyebrow">MACRO CYCLE · 先看方向</p>
-          <h1>把遠方，拆成今天的一小步。</h1>
-          <p>設定一段時間的目標與階段，再交給 AI 轉成每天能執行的小週期。</p>
+          <p className="eyebrow">{t('cyclesEyebrow')}</p>
+          <h1>{t('cyclesHeadline')}</h1>
+          <p>{t('cyclesDescription')}</p>
         </div>
-        <button className="primary-button" type="button" onClick={startNewCycle}>＋ 新增大週期</button>
+        <button className="primary-button" type="button" onClick={startNewCycle}>＋ {t('addCycle')}</button>
       </section>
 
       {message && <p className={status === 'error' ? 'cycle-message error' : 'cycle-message'} role="status">{message}</p>}
@@ -174,47 +182,47 @@ export default function Cycles() {
           <div className="cycle-editor-heading">
             <div>
               <p className="section-number">PLAN</p>
-              <h2>{draft.revision ? '編輯大週期' : '設定新的大週期'}</h2>
+              <h2>{draft.revision ? t('editCycle') : t('newCycle')}</h2>
             </div>
-            <button className="text-button" type="button" onClick={() => setDraft(null)}>取消</button>
+            <button className="text-button" type="button" onClick={() => setDraft(null)}>{t('cancel')}</button>
           </div>
 
           <div className="cycle-fields">
             <label className="wide-field">
-              <span>名稱</span>
-              <input required maxLength={200} value={draft.title} onChange={(event) => updateDraft('title', event.target.value)} placeholder="例如：2027 畢業無縫就業" />
+              <span>{t('cycleName')}</span>
+              <input required maxLength={200} value={draft.title} onChange={(event) => updateDraft('title', event.target.value)} placeholder={t('cycleNameExample')} />
             </label>
             <label>
-              <span>開始</span>
+              <span>{t('start')}</span>
               <input required type="date" value={draft.startDate} onChange={(event) => updateDraft('startDate', event.target.value)} />
             </label>
             <label>
-              <span>結束</span>
+              <span>{t('end')}</span>
               <input required type="date" value={draft.endDate} onChange={(event) => updateDraft('endDate', event.target.value)} />
             </label>
             <label className="wide-field">
-              <span>這個週期完成時，我想成為什麼狀態？</span>
-              <textarea required maxLength={5000} value={draft.goal} onChange={(event) => updateDraft('goal', event.target.value)} placeholder="寫結果，不只寫想做的事。" />
+              <span>{t('cycleGoal')}</span>
+              <textarea required maxLength={5000} value={draft.goal} onChange={(event) => updateDraft('goal', event.target.value)} placeholder={t('cycleGoalPlaceholder')} />
             </label>
             <label className="wide-field">
-              <span>完成後，怎麼獎勵自己？</span>
-              <input maxLength={1000} value={draft.reward} onChange={(event) => updateDraft('reward', event.target.value)} placeholder="例如：安排一天小旅行，或買一本期待已久的書。" />
+              <span>{t('cycleReward')}</span>
+              <input maxLength={1000} value={draft.reward} onChange={(event) => updateDraft('reward', event.target.value)} placeholder={t('cycleRewardPlaceholder')} />
             </label>
             <label>
-              <span>狀態</span>
+              <span>{t('status')}</span>
               <select value={draft.status} onChange={(event) => updateDraft('status', event.target.value as MacroCycle['status'])}>
-                <option value="active">進行中</option>
-                <option value="completed">已完成</option>
+                <option value="active">{t('active')}</option>
+                <option value="completed">{t('completed')}</option>
               </select>
             </label>
           </div>
 
           <div className="phase-editor-heading">
             <div>
-              <h3>階段</h3>
-              <p>每個階段只保留一個清楚的重點。</p>
+              <h3>{t('phases')}</h3>
+              <p>{t('phasesHint')}</p>
             </div>
-            <button className="secondary-button" type="button" onClick={addPhase}>＋ 加入階段</button>
+            <button className="secondary-button" type="button" onClick={addPhase}>＋ {t('addPhase')}</button>
           </div>
 
           <div className="phase-editor-list">
@@ -222,58 +230,58 @@ export default function Cycles() {
               <fieldset className="phase-editor" key={phase.id}>
                 <legend>{String(index + 1).padStart(2, '0')}</legend>
                 <label className="phase-title-field">
-                  <span>階段名稱</span>
+                  <span>{t('phaseName')}</span>
                   <input required maxLength={200} value={phase.title} onChange={(event) => updatePhase(phase.id, { title: event.target.value })} />
                 </label>
                 <label>
-                  <span>開始</span>
+                  <span>{t('start')}</span>
                   <input required type="date" value={phase.startDate} onChange={(event) => updatePhase(phase.id, { startDate: event.target.value })} />
                 </label>
                 <label>
-                  <span>結束</span>
+                  <span>{t('end')}</span>
                   <input required type="date" value={phase.endDate} onChange={(event) => updatePhase(phase.id, { endDate: event.target.value })} />
                 </label>
                 <label className="phase-description-field">
-                  <span>這一段要做到什麼</span>
+                  <span>{t('phaseOutcome')}</span>
                   <textarea maxLength={2000} value={phase.description} onChange={(event) => updatePhase(phase.id, { description: event.target.value })} />
                 </label>
-                <button className="remove-phase" type="button" onClick={() => updateDraft('phases', draft.phases.filter((item) => item.id !== phase.id))}>移除</button>
+                <button className="remove-phase" type="button" onClick={() => updateDraft('phases', draft.phases.filter((item) => item.id !== phase.id))}>{t('remove')}</button>
               </fieldset>
             ))}
           </div>
 
           <div className="cycle-editor-actions">
-            <p>資料只存進你的行事曆；按下 AI 拆解時才由你決定貼給哪個 AI。</p>
-            <button className="primary-button" type="submit" disabled={status === 'saving'}>{status === 'saving' ? '正在儲存…' : '儲存大週期'}</button>
+            <p>{t('cycleDataNote')}</p>
+            <button className="primary-button" type="submit" disabled={status === 'saving'}>{status === 'saving' ? t('saving') : t('saveCycle')}</button>
           </div>
         </form>
       )}
 
       <section className="cycles-list" aria-busy={status === 'loading'}>
         {status === 'loading' ? (
-          <div className="card cycle-empty">正在打開你的大週期…</div>
+          <div className="card cycle-empty">{t('loadingCycles')}</div>
         ) : cycles.length === 0 ? (
           <div className="card cycle-empty">
             <span>◎</span>
-            <h2>先決定要去哪裡</h2>
-            <p>新增第一個大週期，再把它拆成幾個有明確結果的階段。</p>
+            <h2>{t('emptyCyclesTitle')}</h2>
+            <p>{t('emptyCyclesText')}</p>
           </div>
         ) : (
           cycles.map((cycle) => (
             <article className="card cycle-card" key={cycle.id}>
               <div className="cycle-card-heading">
                 <div>
-                  <p className="cycle-dates">{displayDate(cycle.startDate)} — {displayDate(cycle.endDate)}</p>
+                  <p className="cycle-dates">{displayDate(cycle.startDate, locale)} — {displayDate(cycle.endDate, locale)}</p>
                   <h2>{cycle.title}</h2>
                   <p className="cycle-goal">{cycle.goal}</p>
                 </div>
-                <span className={cycle.status === 'completed' ? 'cycle-status completed' : 'cycle-status'}>{cycle.status === 'completed' ? '已完成' : '進行中'}</span>
+                <span className={cycle.status === 'completed' ? 'cycle-status completed' : 'cycle-status'}>{cycle.status === 'completed' ? t('completed') : t('active')}</span>
               </div>
 
-              <div className="cycle-progress" aria-label={`大週期進度 ${cycle.progress.percentage}%`}>
+              <div className="cycle-progress" aria-label={t('cycleProgress', { progress: cycle.progress.percentage })}>
                 <div className="cycle-progress-heading">
                   <strong>{cycle.progress.percentage}%</strong>
-                  <span>{cycle.progress.total ? `${cycle.progress.completed} / ${cycle.progress.total} 個小週期任務完成` : '尚未綁定小週期任務'}</span>
+                  <span>{cycle.progress.total ? t('cycleTasksDone', { completed: cycle.progress.completed, total: cycle.progress.total }) : t('noLinkedTasks')}</span>
                 </div>
                 <div className="cycle-progress-track" aria-hidden="true">
                   <i style={{ width: `${cycle.progress.percentage}%` }} />
@@ -281,26 +289,26 @@ export default function Cycles() {
               </div>
 
               <div className={cycle.reward ? 'cycle-reward' : 'cycle-reward empty'}>
-                <strong>完成獎勵</strong>
-                <p>{cycle.reward || '還沒設定。替完成目標的自己留一份期待。'}</p>
+                <strong>{t('reward')}</strong>
+                <p>{cycle.reward || t('noReward')}</p>
               </div>
 
               <ol className="phase-timeline">
                 {cycle.phases.length ? cycle.phases.map((phase) => (
                   <li key={phase.id}>
                     <span className="phase-dot" aria-hidden="true" />
-                    <p>{displayDate(phase.startDate)} — {displayDate(phase.endDate)}</p>
+                    <p>{displayDate(phase.startDate, locale)} — {displayDate(phase.endDate, locale)}</p>
                     <h3>{phase.title}</h3>
                     {phase.description && <small>{phase.description}</small>}
                   </li>
                 )) : (
-                  <li className="no-phase">尚未設定階段，可以先請 AI 幫你拆分。</li>
+                  <li className="no-phase">{t('noPhases')}</li>
                 )}
               </ol>
 
               <div className="cycle-card-actions">
-                <button className="secondary-button" type="button" onClick={() => copyAiPrompt(cycle)}>複製 AI 拆解指令</button>
-                <button className="text-button" type="button" onClick={() => editCycle(cycle)}>編輯</button>
+                <button className="secondary-button" type="button" onClick={() => copyAiPrompt(cycle)}>{t('copyAiPrompt')}</button>
+                <button className="text-button" type="button" onClick={() => editCycle(cycle)}>{t('edit')}</button>
               </div>
             </article>
           ))
@@ -308,7 +316,7 @@ export default function Cycles() {
       </section>
 
       <footer>
-        <p>大週期決定方向，小週期負責前進。</p>
+        <p>{t('cyclesFooter')}</p>
         <span>MACRO → DAILY</span>
       </footer>
     </div>

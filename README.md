@@ -1,43 +1,112 @@
-# 日常
+<div align="center">
 
-一天一頁的個人行事曆：[calendar.matthiola.dev](https://calendar.matthiola.dev/)
+# Daybook
 
-- 大週期：設定日期範圍、目標、階段與完成獎勵
-- 小週期：每日待辦可綁定大週期／階段，完成後自動更新大週期進度
-- 重複任務：按天、週或月重複，可整批修改或刪除
-- 時間切分：自訂每日等分並拖放待辦，手機也可從編輯選單安排
-- 自訂紀錄：建立 LeetCode 筆記等跨日期欄位
-- 習慣設計：身份、觸發提示、兩分鐘起步、連續完成與避免連續錯過提醒
-- AI 規劃：在網頁對話中取得大／小週期建議，預覽後直接套用到行事曆
-- Google 或帳號密碼登入
-- D1 雲端同步，支援手機與桌面
-- 本機 agent 指令
+### Turn a distant goal into one small step for today.
 
-## 開發
+An AI-assisted calendar for planning macro cycles, building daily habits, and learning from reflection.
 
-需要 Node.js 22.13 以上版本。
+[Live app](https://calendar.matthiola.dev/) · [AI planner guide](docs/ai-planner.md) · [Report a vulnerability](SECURITY.md)
+
+[English](README.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
+
+</div>
+
+![Daybook AI planner turning a goal into a macro cycle and daily tasks](docs/images/ai-planner-demo.png)
+
+## Why Daybook?
+
+Most task lists begin with *what should I do today?* Daybook begins one level higher: *what am I trying to change, and what is the smallest useful action now?*
+
+Set a time-bounded macro cycle, describe the outcome, divide it into phases, and connect each daily task to the larger direction. The built-in AI planner can read the relevant dates, respect existing commitments, and prepare a proposal for review. Nothing is written until you approve it.
+
+## What makes it different
+
+| From intention | To daily action | To learning |
+| --- | --- | --- |
+| Macro cycles with outcomes, phases, dates, and a completion reward | AI-generated tasks, recurring schedules, day sections, and two-minute starts | Progress bars, streaks, activity notes, reflections, and custom records |
+
+- **AI planning with a safety step** — converse in English, Traditional Chinese, or Japanese; preview the proposed cycle and tasks before applying them.
+- **Macro and daily cycles** — link small tasks to a goal or phase and watch the macro-cycle progress update automatically.
+- **A day you can shape** — divide each day into focused sections, then drag tasks into place or assign them on mobile.
+- **Useful repetition** — repeat by day, week, or month; stop after a count or on a date; edit one occurrence or the whole series.
+- **Habit-friendly details** — add the identity you are building, the cue that starts the action, and a two-minute version for difficult days.
+- **A record beyond checkboxes** — capture what happened, write a reflection, and create reusable fields such as LeetCode notes.
+- **Private accounts and device sync** — use Google or a username and password. Each account has isolated calendar data that follows it across devices.
+- **Agent-ready** — a local CLI lets an authorized coding agent read and update the same calendar without direct database access.
+
+## Inspired by *Atomic Habits*
+
+Daybook turns several ideas from James Clear's habit framework into practical planning controls:
+
+- define the identity behind a habit, not only its outcome;
+- make the starting cue explicit;
+- reduce resistance with a two-minute first action;
+- make progress visible and recover quickly after a missed occurrence.
+
+Read the official [Atomic Habits summary](https://jamesclear.com/atomic-habits-summary) or [book introduction](https://jamesclear.com/atomic-habits). Daybook is an independent open-source project and is not affiliated with James Clear.
+
+## AI planner
+
+Ask Daybook to create a macro cycle, break an active phase into daily work, check for overload, design a habit, or adjust the next two weeks to match real progress.
+
+The planner follows a deliberate review flow:
+
+1. It selects only the date range needed for the request.
+2. The server loads existing tasks, cycles, phases, and day sections in that range.
+3. The model returns a structured proposal instead of writing directly to the database.
+4. Daybook validates dates, limits, links, and duplicates.
+5. You inspect the proposal and choose whether to apply it.
+
+Applying a proposal only adds content; it does not delete or overwrite existing calendar items. See the [AI planner guide](docs/ai-planner.md) for configuration, limits, data flow, and prompt examples.
+
+## Quick start
+
+Requirements: Node.js 22.13 or newer.
 
 ```bash
+git clone https://github.com/matthiola0/my-calendar.git
+cd my-calendar
 npm install
+copy .env.example .env.local
 npm run dev
 ```
 
-複製 `.env.example` 至 `.env.local`。帳號密碼登入需要至少 32 字元的 `PASSWORD_PEPPER`；Google OAuth 為選用功能。網頁 AI 規劃需要伺服器端 `GROQ_API_KEY`，預設模型是 `qwen/qwen3.8-27b`。請勿提交任何 `.env` 檔案。
+Configure `PASSWORD_PEPPER` with at least 32 random characters for username/password authentication. Google OAuth and the web AI planner are optional; the planner requires a server-side `GROQ_API_KEY`. Never commit `.env` files.
+
+Validate a change before opening a pull request:
 
 ```bash
 npm run lint
 npm run build
-npm run db:generate # 修改 db/schema.ts 後執行
+npm run db:generate # only after changing db/schema.ts
 ```
 
-## 結構
+## Project map
 
 ```text
-app/components  介面元件
-app/lib         登入、LLM 與行事曆規劃邏輯
-app/api         後端路由
-db              D1 schema 與遷移
-scripts         本機 agent 指令
+app/components  UI and client interactions
+app/lib         authentication, i18n, calendar, and LLM planning logic
+app/api         authenticated server routes
+db              D1 schema and migrations
+docs            focused project documentation
+scripts         local calendar agent CLI
 ```
 
-網頁 AI 只讀取規劃需要的日期、大週期與每日分段，產生的提案必須由使用者確認才會寫入；套用時只新增內容，不會刪除或覆蓋既有事項。設定、限制、建議問法與資料流程請見 [`docs/ai-planner.md`](docs/ai-planner.md)。本機 agent 指令與必要環境變數請見 [`AGENTS.md`](AGENTS.md) 與 [`.env.example`](.env.example)。安全問題請依 [`SECURITY.md`](SECURITY.md) 回報。
+The application uses React and Next.js-compatible routing through vinext, Drizzle ORM with Cloudflare D1, and a Groq-compatible structured-output planner.
+
+## Local agent access
+
+The project CLI operates as the authenticated owner configured in the local environment. It can read dates before planning, preserve existing items, add linked tasks, and verify the result afterward.
+
+```bash
+npm run calendar -- get 2026-09-01
+npm run calendar -- add 2026-09-01 "Draft the project outline"
+npm run calendar -- cycles
+```
+
+The complete command contract is in [AGENTS.md](AGENTS.md). Calendar content is private data; do not print it in public logs, issues, screenshots, or commits.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep changes focused, preserve account isolation, and include the relevant lint/build or manual verification result. For security problems, use the private process in [SECURITY.md](SECURITY.md) instead of a public issue.

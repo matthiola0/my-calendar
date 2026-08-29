@@ -40,4 +40,6 @@ npm run calendar -- field-write YYYY-MM-DD FIELD_ID "content"
 
 When breaking a macro cycle into daily tasks, read the cycle and daily sections first, then read every target date before adding tasks. Preserve existing tasks, keep each day realistic, link and place new tasks when appropriate, and read the dates again after writing to verify the plan.
 
+Store LeetCode notes in the `LeetCode 筆記` custom field, one problem per line. Do not place them in the activity note.
+
 Never display, commit, or copy values from `.env.local`. Treat calendar content as private user data.

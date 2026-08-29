@@ -2,6 +2,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { PlannerChatMessage, PlannerProposal, PlannerReply } from '../lib/planner-types';
+import { useI18n } from '../lib/i18n';
 
 type ChatItem = PlannerChatMessage & {
   id: string;
@@ -11,33 +12,6 @@ type ChatItem = PlannerChatMessage & {
   applied?: boolean;
 };
 
-const suggestions = [
-  {
-    label: '規劃大週期',
-    prompt: '我想建立一個新的大週期。請先問我最多三個必要問題，再替我規劃階段、緩衝時間和完成獎勵。',
-  },
-  {
-    label: '拆成每日任務',
-    prompt: '請讀取我進行中的大週期和接下來兩週的既有行事曆，保留原有事項，把目前階段拆成每天可完成的小任務。',
-  },
-  {
-    label: '檢查是否超載',
-    prompt: '請檢查我下週的既有任務和大週期，找出工作量過重或日期衝突的地方，先給我調整建議。',
-  },
-  {
-    label: '只安排今天',
-    prompt: '我今天可投入 90 分鐘，請讀取今天的行事曆，替我挑出最值得新增的兩個小任務，並保留緩衝。',
-  },
-  {
-    label: '建立習慣',
-    prompt: '我想培養一個新習慣。請幫我設計身份、觸發提示、兩分鐘起步，並提出未來兩週的合理安排。',
-  },
-  {
-    label: '依進度調整',
-    prompt: '請根據目前大週期的完成進度和接下來兩週的行事曆，提出一份更現實的小週期安排。',
-  },
-];
-
 export default function PlannerChat({
   selectedDate,
   onApplied,
@@ -45,12 +19,13 @@ export default function PlannerChat({
   selectedDate: string;
   onApplied: (firstDate: string | null) => void;
 }) {
+  const { language, t } = useI18n();
   const [messages, setMessages] = useState<ChatItem[]>([
     {
       id: 'welcome',
       role: 'assistant',
       localOnly: true,
-      content: '告訴我你想完成什麼、期限和每週能投入多少時間。我會先讀取相關日期，再提出可以預覽的行事曆計畫。',
+      content: '',
     },
   ]);
   const [input, setInput] = useState('');
@@ -62,6 +37,14 @@ export default function PlannerChat({
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Taipei',
     [],
   );
+  const suggestions = [
+    { label: t('suggestionCycleLabel'), prompt: t('suggestionCyclePrompt') },
+    { label: t('suggestionDailyLabel'), prompt: t('suggestionDailyPrompt') },
+    { label: t('suggestionLoadLabel'), prompt: t('suggestionLoadPrompt') },
+    { label: t('suggestionTodayLabel'), prompt: t('suggestionTodayPrompt') },
+    { label: t('suggestionHabitLabel'), prompt: t('suggestionHabitPrompt') },
+    { label: t('suggestionAdjustLabel'), prompt: t('suggestionAdjustPrompt') },
+  ];
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -85,10 +68,10 @@ export default function PlannerChat({
       const response = await fetch('/api/assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, currentDate: selectedDate, timezone }),
+        body: JSON.stringify({ messages: history, currentDate: selectedDate, timezone, language }),
       });
-      const result = await response.json().catch(() => ({ error: 'AI 暫時沒有回應。' })) as PlannerReply & { error?: string };
-      if (!response.ok) throw new Error(result.error ?? 'AI 暫時沒有回應。');
+      const result = await response.json().catch(() => ({})) as PlannerReply & { error?: string };
+      if (!response.ok) throw new Error(t('plannerTemporaryError'));
 
       const questionText = result.questions.length
         ? `\n\n${result.questions.map((question, index) => `${index + 1}. ${question}`).join('\n')}`
@@ -104,7 +87,7 @@ export default function PlannerChat({
         },
       ]);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'AI 暫時沒有回應。');
+      setError(caught instanceof Error ? caught.message : t('plannerTemporaryError'));
     } finally {
       setStatus('ready');
     }
@@ -120,19 +103,19 @@ export default function PlannerChat({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proposal }),
       });
-      const result = await response.json().catch(() => ({ error: '無法套用提案。' })) as {
+      const result = await response.json().catch(() => ({})) as {
         error?: string;
         cycleCreated?: boolean;
         tasksCreated?: number;
         tasksSkipped?: number;
         firstDate?: string | null;
       };
-      if (!response.ok) throw new Error(result.error ?? '無法套用提案。');
+      if (!response.ok) throw new Error(t('plannerApplyError'));
       const detail = [
-        result.cycleCreated ? '已建立大週期' : null,
-        result.tasksCreated ? `新增 ${result.tasksCreated} 個任務` : null,
-        result.tasksSkipped ? `略過 ${result.tasksSkipped} 個重複任務` : null,
-      ].filter(Boolean).join('，');
+        result.cycleCreated ? t('plannerAppliedCycle') : null,
+        result.tasksCreated ? t('plannerAppliedTasks', { count: result.tasksCreated }) : null,
+        result.tasksSkipped ? t('plannerSkippedTasks', { count: result.tasksSkipped }) : null,
+      ].filter(Boolean).join(' · ');
       setMessages((current) => current.map((message) =>
         message.id === messageId
           ? { ...message, applied: true }
@@ -141,11 +124,11 @@ export default function PlannerChat({
         id: crypto.randomUUID(),
         role: 'assistant',
         localOnly: true,
-        content: `${detail || '提案已套用'}。你可以回到每日或大週期頁面查看。`,
+        content: detail ? `${detail}. ${t('plannerApplied')}` : t('plannerApplied'),
       }));
       onApplied(result.firstDate ?? null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '無法套用提案。');
+      setError(caught instanceof Error ? caught.message : t('plannerApplyError'));
     } finally {
       setStatus('ready');
     }
@@ -167,34 +150,34 @@ export default function PlannerChat({
     <section className="planner-view" id="top" aria-labelledby="planner-title">
       <div className="planner-heading">
         <div>
-          <p className="eyebrow">AI PLANNER · 先對話，再寫入</p>
-          <h1 id="planner-title">一起把想法，排成做得到的日子。</h1>
-          <p>AI 只會讀取規劃所需的日期；提案在你確認前不會更動行事曆。</p>
+          <p className="eyebrow">{t('plannerEyebrow')}</p>
+          <h1 id="planner-title">{t('plannerHeadline')}</h1>
+          <p>{t('plannerDescription')}</p>
         </div>
-        <div className="planner-privacy"><span aria-hidden="true">◇</span><p><strong>對話不保存</strong><small>離開或重新整理後即清除</small></p></div>
+        <div className="planner-privacy"><span aria-hidden="true">◇</span><p><strong>{t('plannerNoSave')}</strong><small>{t('plannerNoSaveHint')}</small></p></div>
       </div>
 
       <div className="planner-layout">
-        <aside className="planner-suggestions" aria-label="建議問題">
-          <p>不知道怎麼開始？</p>
+        <aside className="planner-suggestions" aria-label={t('plannerSuggestionsTitle')}>
+          <p>{t('plannerSuggestionsTitle')}</p>
           <div>
             {suggestions.map((suggestion) => (
               <button key={suggestion.label} type="button" onClick={() => chooseSuggestion(suggestion.prompt)}>
                 <strong>{suggestion.label}</strong>
-                <span>填入對話框</span>
+                <span>{t('plannerFillPrompt')}</span>
               </button>
             ))}
           </div>
-          <small>目前以 {selectedDate} 作為「今天」來理解相對日期。</small>
+          <small>{t('plannerCurrentDate', { date: selectedDate })}</small>
         </aside>
 
         <div className="card planner-chat-card">
           <div className="planner-messages" aria-live="polite">
             {messages.map((message) => (
               <article className={`planner-message ${message.role}`} key={message.id}>
-                <div className="planner-avatar" aria-hidden="true">{message.role === 'assistant' ? '日' : '你'}</div>
+                <div className="planner-avatar" aria-hidden="true">{message.role === 'assistant' ? t('brandMark') : language === 'zh' ? '你' : language === 'ja' ? '私' : 'Y'}</div>
                 <div className="planner-bubble">
-                  <p>{message.questions?.length ? message.content.split('\n\n')[0] : message.content}</p>
+                  <p>{message.id === 'welcome' ? t('plannerWelcome') : message.questions?.length ? message.content.split('\n\n')[0] : message.content}</p>
                   {message.questions?.length ? (
                     <ol>{message.questions.map((question) => <li key={question}>{question}</li>)}</ol>
                   ) : null}
@@ -210,8 +193,8 @@ export default function PlannerChat({
               </article>
             ))}
             {status === 'sending' ? (
-              <article className="planner-message assistant loading" aria-label="AI 正在規劃">
-                <div className="planner-avatar" aria-hidden="true">日</div>
+              <article className="planner-message assistant loading" aria-label={t('plannerThinking')}>
+                <div className="planner-avatar" aria-hidden="true">{t('brandMark')}</div>
                 <div className="planner-bubble"><span /><span /><span /></div>
               </article>
             ) : null}
@@ -228,15 +211,15 @@ export default function PlannerChat({
                 onKeyDown={handleKeyDown}
                 maxLength={4_000}
                 rows={3}
-                placeholder="例如：我想在十月底完成作品集，每週能投入八小時…"
-                aria-label="和 AI 規劃行事曆"
+                placeholder={t('plannerPlaceholder')}
+                aria-label={t('plannerAria')}
                 disabled={status !== 'ready'}
               />
               <button type="submit" disabled={!input.trim() || status !== 'ready'}>
-                {status === 'ready' ? '送出' : '請稍候'}
+                {status === 'ready' ? t('send') : t('pleaseWait')}
               </button>
             </div>
-            <small>Enter 送出 · Shift + Enter 換行。請避免輸入不必要的敏感資料。</small>
+            <small>{t('plannerComposerHint')}</small>
           </form>
         </div>
       </div>
@@ -255,18 +238,19 @@ function ProposalCard({
   applying: boolean;
   onApply: () => void;
 }) {
+  const { t } = useI18n();
   const groupedTasks = proposal.tasks.reduce<Record<string, typeof proposal.tasks>>((groups, task) => {
     (groups[task.date] ??= []).push(task);
     return groups;
   }, {});
 
   return (
-    <section className="planner-proposal" aria-label="AI 行事曆提案">
-      <header><span>提案預覽</span><strong>{proposal.tasks.length} 個新任務</strong></header>
+    <section className="planner-proposal" aria-label={t('proposalLabel')}>
+      <header><span>{t('proposalPreview')}</span><strong>{t('proposalTaskCount', { count: proposal.tasks.length })}</strong></header>
       <p>{proposal.summary}</p>
       {proposal.cycle ? (
         <div className="proposal-cycle">
-          <small>NEW MACRO CYCLE</small>
+          <small>{t('proposalNewCycle')}</small>
           <h3>{proposal.cycle.title}</h3>
           <p>{proposal.cycle.startDate} — {proposal.cycle.endDate}</p>
           <strong>{proposal.cycle.goal}</strong>
@@ -286,12 +270,11 @@ function ProposalCard({
         </div>
       ) : null}
       <footer>
-        <small>套用只會新增內容，既有事項不會被刪除或覆蓋。</small>
+        <small>{t('proposalSafety')}</small>
         <button type="button" onClick={onApply} disabled={applied || applying}>
-          {applied ? '已套用' : applying ? '正在套用…' : '確認套用到行事曆'}
+          {applied ? t('proposalApplied') : applying ? t('proposalApplying') : t('proposalApply')}
         </button>
       </footer>
     </section>
   );
 }
-

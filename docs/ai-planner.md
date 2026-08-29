@@ -1,60 +1,60 @@
-# AI 行事曆規劃
+# AI calendar planner
 
-AI 規劃頁讓登入使用者直接以繁體中文描述目標、期限與可投入時間。系統會讀取相關日期、大週期與每日分段，回傳大週期／每日任務提案；提案在使用者按下「確認套用到行事曆」前不會寫入。
+The AI planner lets an authenticated user describe an outcome, deadline, and available time in English, Traditional Chinese, or Japanese. Daybook reads only the relevant dates, macro cycles, phases, and day sections, then returns a proposal for review. No proposal is written until the user selects **Apply to calendar**.
 
-## 設定
+## Configuration
 
-1. 在 [Groq Console](https://console.groq.com/keys) 建立 API key。
-2. 本機開發時將 key 放進 `.env.local`：
+1. Create an API key in the [Groq Console](https://console.groq.com/keys).
+2. Add the key to `.env.local` for local development:
 
    ```dotenv
    GROQ_API_KEY=gsk_...
    LLM_MODEL=qwen/qwen3.8-27b
    ```
 
-3. 正式環境把 `GROQ_API_KEY` 設為伺服器端 secret；不可寫進前端程式、Git 或公開記錄。
+3. Store `GROQ_API_KEY` as a server-side secret in production. Never place it in client code, Git, screenshots, or public logs.
 
-`LLM_MODEL` 可省略。若 Groq 調整模型清單，只要更新這個值，不必修改程式碼。
+`LLM_MODEL` is optional. Change it when Groq's available model list changes; no application code change is required.
 
-## 使用流程
+## Request flow
 
-1. 使用者從導覽列進入「AI 規劃」。
-2. 系統先判斷需要讀取的日期範圍，最多 120 天。
-3. 伺服器讀取該範圍的既有任務、週期／階段與每日分段，再送出最小必要內容給 LLM。
-4. 資訊不足時，AI 最多詢問三個問題；資料足夠時才產生提案。
-5. 使用者檢查週期、階段與每日任務，按下確認後才寫入 D1。
-6. 寫入端會重新讀取每個目標日期，驗證所有連結並略過同日同名的重複任務。
+1. The user opens **AI planner** from the application navigation.
+2. A range-selection request identifies the smallest useful date range, up to 120 days.
+3. The server loads existing tasks, cycles, phases, and day sections in that range and sends the minimum planning context to the model.
+4. The model asks no more than three essential questions when information is missing. It creates a proposal only after the outcome, deadline, and available time are clear.
+5. The user reviews the proposed cycle, phases, and daily tasks.
+6. The apply route reads each target date again, validates all links and limits, and skips tasks with the same name on the same date.
 
-對話只存在目前頁面記憶體，重新整理或離開後即清除。AI 提案一次最多新增 30 個任務、每天最多 5 個；每個帳號每分鐘最多對話 8 次、每天最多 40 次。
+The conversation remains in the current browser page and is cleared by navigation or refresh. A proposal may contain at most 30 tasks and at most five new tasks on one date. Each account may make up to eight planner requests per minute and 40 per day.
 
-## 資料與安全界線
+## Data and safety boundaries
 
-- API key 只存在伺服器環境。
-- LLM 不持有資料庫或 agent 金鑰，也不能直接執行 SQL。
-- 模型只能產生結構化提案；所有欄位、日期、長度與週期連結都由伺服器再次驗證。
-- 套用只新增大週期、階段與任務，不刪除、移動或覆寫既有內容。
-- 同一份提案重複套用時，同日同名任務會被略過。
-- 請勿在對話中輸入與規劃無關的密碼、金鑰、身分證號、醫療或財務資料。
+- The provider API key exists only in the server environment.
+- The model has no database credentials, agent credentials, or SQL access.
+- The model returns structured data. The server validates every field, date, length, day section, and macro-cycle link.
+- Applying a proposal may add a cycle, phases, and tasks. It never deletes, moves, or overwrites existing items.
+- Reapplying a proposal skips tasks that already exist with the same text on the same date.
+- Avoid unrelated passwords, API keys, government identifiers, medical records, or financial information in planner conversations.
 
-Groq 表示一般推論請求預設不保留輸入與輸出，並提供 Zero Data Retention 控制；正式上線前仍應依產品所在地與使用情境檢查最新的 [Groq 資料政策](https://console.groq.com/docs/your-data)。
+Consult Groq's current [data controls documentation](https://console.groq.com/docs/your-data) before deploying to a new jurisdiction or changing the application's data-handling promises.
 
-## 建議問法
+## Prompt examples
 
-### 大週期
+### Macro cycles
 
-- `我想在 10 月底前完成作品集，每週可投入 8 小時。先問我最多三個必要問題，再規劃階段、緩衝時間和完成獎勵。`
-- `請檢查我目前進行中的大週期，找出日期衝突與工作量過重的地方，先給調整建議。`
-- `依照目前進度重新安排這個大週期；保留已完成內容，縮小不現實的部分。`
+- `I want to publish my portfolio by October 31 and can spend eight hours a week. Ask no more than three essential questions, then propose phases, buffer time, and a completion reward.`
+- `Review my active macro cycles. Find date conflicts or overloaded days and suggest adjustments before changing anything.`
+- `Adjust this macro cycle to match my current progress. Preserve completed work and reduce any unrealistic scope.`
 
-### 小週期
+### Daily cycles
 
-- `讀取下週既有行事曆和進行中的大週期，每天最多安排三個重要任務，保留原有事項。`
-- `我今天只有 90 分鐘而且精神普通，請從目前目標拆出最值得做的兩件小事。`
-- `替我設計兩週的新習慣，包含身份、觸發提示、兩分鐘起步與合理的休息日。`
+- `Read next week's existing calendar and active macro cycle. Preserve current items, add no more than three important tasks per day, and leave buffer time.`
+- `I have 90 minutes today and average energy. Choose the two highest-value small actions from my current goal.`
+- `Design a two-week habit with an identity, cue, two-minute start, and realistic rest days.`
 
 ## API
 
-- `POST /api/assistant/chat`：分析對話、讀取使用者資料並回傳回覆或結構化提案。
-- `POST /api/assistant/apply`：驗證並套用使用者確認過的提案。
+- `POST /api/assistant/chat` selects and loads the planning context, then returns questions or a structured proposal.
+- `POST /api/assistant/apply` validates and applies a proposal that the user has approved.
 
-兩個端點都要求既有登入狀態；不得由匿名使用者或瀏覽器直接呼叫 Groq。
+Both routes require an authenticated session. The browser never calls Groq directly.

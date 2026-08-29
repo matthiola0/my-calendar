@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       parsed.currentDate,
       parsed.timezone,
       context,
+      parsed.language,
     );
     return Response.json(reply, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
@@ -48,6 +49,7 @@ function parseRequest(body: unknown): {
   messages: PlannerChatMessage[];
   currentDate: string;
   timezone: string;
+  language: 'en' | 'zh' | 'ja';
 } | null {
   if (!body || typeof body !== 'object') return null;
   const candidate = body as Record<string, unknown>;
@@ -59,7 +61,8 @@ function parseRequest(body: unknown): {
     !isValidDate(candidate.currentDate) ||
     typeof candidate.timezone !== 'string' ||
     candidate.timezone.length < 1 ||
-    candidate.timezone.length > 100
+    candidate.timezone.length > 100 ||
+    (candidate.language !== 'en' && candidate.language !== 'zh' && candidate.language !== 'ja')
   ) return null;
 
   let totalLength = 0;
@@ -81,6 +84,7 @@ function parseRequest(body: unknown): {
     messages,
     currentDate: candidate.currentDate,
     timezone: candidate.timezone,
+    language: candidate.language,
   };
 }
 
@@ -90,4 +94,3 @@ function isValidDate(value: string) {
   const parsed = new Date(Date.UTC(year, month - 1, day));
   return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
 }
-

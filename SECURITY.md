@@ -1,5 +1,5 @@
-# Security
+# Security policy
 
-請勿在公開 issue 張貼漏洞、金鑰或個人行事曆內容。
+Do not post vulnerabilities, credentials, or private calendar content in a public issue.
 
-請使用 [GitHub Private Vulnerability Reporting](https://github.com/matthiola0/my-calendar/security/advisories/new) 私下回報安全問題，並附上影響範圍與重現方式。
+Report security problems through [GitHub Private Vulnerability Reporting](https://github.com/matthiola0/my-calendar/security/advisories/new). Include the affected component, expected impact, reproduction steps, and any relevant version or deployment details.
