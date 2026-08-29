@@ -43,6 +43,7 @@ export async function POST(request: Request) {
     normalizeUsername(username),
     8,
     15 * 60 * 1000,
+    false,
   );
   if (!accountLimit.allowed) return rateLimited(accountLimit.retryAfter);
 

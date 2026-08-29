@@ -231,6 +231,13 @@ export function parseProposal(
   }
   const tasks = candidate.tasks.map((task) => parseTask(task, cycle, validation));
   if (!cycle && tasks.length === 0) throw invalidReply();
+  const taskDates = tasks.map((task) => task.date).sort();
+  if (
+    taskDates.length > 0 &&
+    daysBetween(taskDates[0], taskDates.at(-1)!) + 1 > MAX_CONTEXT_DAYS
+  ) {
+    throw invalidReply();
+  }
   return { summary, cycle, tasks };
 }
 
