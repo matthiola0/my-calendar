@@ -33,6 +33,7 @@ switch (command) {
       phaseId: null,
       sectionId: null,
       recurrenceId: null,
+      deadline: null,
       habitCue: null,
       tinyStart: null,
       identity: null,
@@ -70,6 +71,29 @@ switch (command) {
       }),
     });
     console.log(`Created ${result.count} recurring tasks starting ${date}.`);
+    break;
+  }
+  case 'short': {
+    const [date, text, deadline] = args;
+    if (!date || !text || !deadline) {
+      fail('Usage: npm run calendar -- short YYYY-MM-DD "task" END_DATE');
+    }
+    const result = await request('/api/recurring-tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        startDate: date,
+        text,
+        cycleId: null,
+        phaseId: null,
+        sectionId: null,
+        deadline,
+        habitCue: null,
+        tinyStart: null,
+        identity: null,
+        recurrence: { unit: 'day', interval: 1, endMode: 'date', until: deadline },
+      }),
+    });
+    console.log(`Created ${result.count} daily tasks through ${deadline}.`);
     break;
   }
   case 'toggle': {
@@ -369,6 +393,7 @@ function printHelp() {
   console.log(`Calendar agent commands:
   get        YYYY-MM-DD
   add        YYYY-MM-DD "task"
+  short      YYYY-MM-DD "task" END_DATE
   repeat     YYYY-MM-DD "task" day|week|month INTERVAL count|date COUNT|END_DATE
   toggle     YYYY-MM-DD TASK_ID
   remove     YYYY-MM-DD TASK_ID

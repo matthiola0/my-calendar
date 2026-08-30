@@ -74,6 +74,7 @@ export const tasks = sqliteTable(
     phaseId: text('phase_id'),
     sectionId: text('section_id'),
     recurrenceId: text('recurrence_id'),
+    deadline: text('deadline'),
     habitCue: text('habit_cue'),
     tinyStart: text('tiny_start'),
     identity: text('identity'),

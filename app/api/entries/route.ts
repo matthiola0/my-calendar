@@ -14,6 +14,7 @@ type Task = {
   phaseId: string | null;
   sectionId: string | null;
   recurrenceId: string | null;
+  deadline: string | null;
   habitCue: string | null;
   tinyStart: string | null;
   identity: string | null;
@@ -37,6 +38,7 @@ type TaskRow = {
   phaseId: string | null;
   sectionId: string | null;
   recurrenceId: string | null;
+  deadline: string | null;
   habitCue: string | null;
   tinyStart: string | null;
   identity: string | null;
@@ -67,7 +69,7 @@ export async function GET(request: Request) {
     .prepare(
       `SELECT id, date, text, done, cycle_id AS cycleId, phase_id AS phaseId,
         section_id AS sectionId, recurrence_id AS recurrenceId,
-        habit_cue AS habitCue, tiny_start AS tinyStart, identity
+        deadline, habit_cue AS habitCue, tiny_start AS tinyStart, identity
        FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC`,
     )
     .bind(ownerId, date)
@@ -84,11 +86,12 @@ export async function GET(request: Request) {
         phaseId: task.phaseId,
         sectionId: task.sectionId,
         recurrenceId: task.recurrenceId,
+        deadline: task.deadline,
         habitCue: task.habitCue,
         tinyStart: task.tinyStart,
         identity: task.identity,
-        streak: task.recurrenceId ? seriesStats.get(`${task.recurrenceId}:${date}`)?.streak ?? 0 : 0,
-        recoveryDue: task.recurrenceId ? seriesStats.get(`${task.recurrenceId}:${date}`)?.recoveryDue ?? false : false,
+        streak: task.recurrenceId && !task.deadline ? seriesStats.get(`${task.recurrenceId}:${date}`)?.streak ?? 0 : 0,
+        recoveryDue: task.recurrenceId && !task.deadline ? seriesStats.get(`${task.recurrenceId}:${date}`)?.recoveryDue ?? false : false,
       })),
       activity: day?.activity ?? '',
       reflection: day?.reflection ?? '',
@@ -165,8 +168,8 @@ export async function PUT(request: Request) {
         .prepare(`
           INSERT INTO tasks
             (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-             recurrence_id, habit_cue, tiny_start, identity, position, created_at, updated_at)
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+             recurrence_id, deadline, habit_cue, tiny_start, identity, position, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE EXISTS (
             SELECT 1 FROM day_entries
             WHERE owner_id = ? AND date = ? AND revision = ?
@@ -182,6 +185,7 @@ export async function PUT(request: Request) {
           task.phaseId,
           task.sectionId,
           task.recurrenceId,
+          task.deadline,
           task.habitCue,
           task.tinyStart,
           task.identity,
@@ -236,6 +240,7 @@ function parseEntry(body: unknown):
     const phaseId = task.phaseId === undefined ? null : task.phaseId;
     const sectionId = task.sectionId === undefined ? null : task.sectionId;
     const recurrenceId = task.recurrenceId === undefined ? null : task.recurrenceId;
+    const deadline = task.deadline === undefined ? null : task.deadline;
     const habitCue = task.habitCue === undefined ? null : task.habitCue;
     const tinyStart = task.tinyStart === undefined ? null : task.tinyStart;
     const identity = task.identity === undefined ? null : task.identity;
@@ -253,6 +258,7 @@ function parseEntry(body: unknown):
       (phaseId !== null && cycleId === null) ||
       (sectionId !== null && (typeof sectionId !== 'string' || sectionId.length < 1 || sectionId.length > 100)) ||
       (recurrenceId !== null && (typeof recurrenceId !== 'string' || recurrenceId.length < 1 || recurrenceId.length > 100)) ||
+      (deadline !== null && (typeof deadline !== 'string' || !isValidDate(deadline) || deadline < candidate.date || recurrenceId === null)) ||
       (habitCue !== null && (typeof habitCue !== 'string' || habitCue.length > 300)) ||
       (tinyStart !== null && (typeof tinyStart !== 'string' || tinyStart.length > 300)) ||
       (identity !== null && (typeof identity !== 'string' || identity.length > 300))
@@ -268,6 +274,7 @@ function parseEntry(body: unknown):
       phaseId,
       sectionId,
       recurrenceId,
+      deadline,
       habitCue: typeof habitCue === 'string' && habitCue.trim() ? habitCue.trim() : null,
       tinyStart: typeof tinyStart === 'string' && tinyStart.trim() ? tinyStart.trim() : null,
       identity: typeof identity === 'string' && identity.trim() ? identity.trim() : null,
@@ -289,7 +296,7 @@ function parseEntry(body: unknown):
 }
 
 async function loadSeriesStats(db: D1Database, ownerId: string, tasks: TaskRow[]) {
-  const recurrenceIds = [...new Set(tasks.flatMap((task) => task.recurrenceId ? [task.recurrenceId] : []))];
+  const recurrenceIds = [...new Set(tasks.flatMap((task) => task.recurrenceId && !task.deadline ? [task.recurrenceId] : []))];
   const stats = new Map<string, { streak: number; recoveryDue: boolean }>();
   if (recurrenceIds.length === 0) return stats;
 
@@ -342,11 +349,29 @@ async function taskReferencesAreValid(db: D1Database, ownerId: string, tasks: Ta
   const phaseCycles = new Map(phaseRows.results.map((phase) => [phase.id, phase.cycleId]));
   const sectionIds = new Set(sectionRows.results.map((section) => section.id));
 
-  return tasks.every((task) =>
+  const referencesAreValid = tasks.every((task) =>
     (task.cycleId === null || cycleIds.has(task.cycleId)) &&
     (task.phaseId === null || phaseCycles.get(task.phaseId) === task.cycleId) &&
     (task.sectionId === null || sectionIds.has(task.sectionId)),
   );
+  if (!referencesAreValid) return false;
+
+  const recurringTasks = tasks.filter((task) => task.recurrenceId);
+  if (recurringTasks.length === 0) return true;
+  const recurrenceIds = [...new Set(recurringTasks.map((task) => task.recurrenceId as string))];
+  const placeholders = recurrenceIds.map(() => '?').join(', ');
+  const seriesRows = await db
+    .prepare(`
+      SELECT recurrence_id AS recurrenceId, deadline
+      FROM tasks
+      WHERE owner_id = ? AND recurrence_id IN (${placeholders})
+    `)
+    .bind(ownerId, ...recurrenceIds)
+    .all<{ recurrenceId: string; deadline: string | null }>();
+  return recurringTasks.every((task) => {
+    const series = seriesRows.results.filter((row) => row.recurrenceId === task.recurrenceId);
+    return series.length > 0 && series.every((row) => row.deadline === task.deadline);
+  });
 }
 
 function isValidDate(value: string) {

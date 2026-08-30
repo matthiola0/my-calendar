@@ -31,7 +31,7 @@ Set a time-bounded macro cycle, describe the outcome, divide it into phases, and
 - **AI planning with a safety step** — converse in English, Traditional Chinese, or Japanese; preview the proposed cycle and tasks before applying them.
 - **Macro and daily cycles** — link small tasks to a goal or phase and watch the macro-cycle progress update automatically.
 - **A day you can shape** — divide each day into focused sections, then drag tasks into place or assign them on mobile.
-- **Useful repetition** — repeat by day, week, or month; stop after a count or on a date; edit one occurrence or the whole series.
+- **Useful repetition** — create a short cycle that appears daily with its deadline, or repeat by day, week, or month; edit one occurrence or the whole series.
 - **Habit-friendly details** — add the identity you are building, the cue that starts the action, and a two-minute version for difficult days.
 - **A record beyond checkboxes** — capture what happened, write a reflection, and create reusable fields such as LeetCode notes.
 - **Private accounts and device sync** — use Google or a username and password. Each account has isolated calendar data that follows it across devices.

@@ -178,6 +178,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .task-cycle-label { min-width: 0; padding: 0 5px 6px; overflow: hidden; color: var(--sage); font-size: 9px; font-weight: 700; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .task-meta { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 5px 4px; }
 .task-meta span { padding: 2px 6px; border-radius: 99px; background: var(--sage-soft); color: var(--sage); font-size: 8px; font-weight: 700; line-height: 1.4; }
+.task-meta .deadline-badge { background: #f7e7e1; color: #9b4d42; }
 .task-meta .streak-badge { background: #f3ead6; color: #8b672d; }
 .identity-note { padding: 0 5px 3px; color: var(--sage); font-size: 9px; font-weight: 700; line-height: 1.45; }
 .habit-note { padding: 0 5px 3px; color: var(--muted); font-size: 9px; line-height: 1.45; }

@@ -13,6 +13,7 @@ type Task = {
   phaseId: string | null;
   sectionId: string | null;
   recurrenceId: string | null;
+  deadline: string | null;
   habitCue: string | null;
   tinyStart: string | null;
   identity: string | null;
@@ -23,12 +24,13 @@ type Task = {
 type CycleOption = { id: string; title: string; phases: Array<{ id: string; title: string }> };
 type DaySection = { id: string; title: string };
 type CustomField = { id: string; title: string; content: string };
-type TaskDraft = Pick<Task, 'id' | 'text' | 'cycleId' | 'phaseId' | 'sectionId' | 'recurrenceId' | 'habitCue' | 'tinyStart' | 'identity'>;
+type TaskDraft = Pick<Task, 'id' | 'text' | 'cycleId' | 'phaseId' | 'sectionId' | 'recurrenceId' | 'deadline' | 'habitCue' | 'tinyStart' | 'identity'>;
 type DayEntry = { tasks: Task[]; activity: string; reflection: string; revision: string | null };
 type SyncStatus = 'loading' | 'saving' | 'saved' | 'conflict' | 'error';
-type RepeatUnit = '' | 'day' | 'week' | 'month';
+type RepeatMode = '' | 'short' | 'day' | 'week' | 'month';
 
 const emptyEntry: DayEntry = { tasks: [], activity: '', reflection: '', revision: null };
+const MAX_SHORT_CYCLE_DAYS = 365;
 class SaveConflictError extends Error {}
 
 function dateKey(date: Date) {
@@ -138,7 +140,7 @@ export default function Daybook({ userName }: { userName: string }) {
   const [habitCue, setHabitCue] = useState('');
   const [tinyStart, setTinyStart] = useState('');
   const [identity, setIdentity] = useState('');
-  const [repeatUnit, setRepeatUnit] = useState<RepeatUnit>('');
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('');
   const [repeatInterval, setRepeatInterval] = useState(1);
   const [repeatEndMode, setRepeatEndMode] = useState<'count' | 'date'>('count');
   const [repeatCount, setRepeatCount] = useState(7);
@@ -270,19 +272,30 @@ export default function Daybook({ userName }: { userName: string }) {
     event.preventDefault();
     const text = taskText.trim();
     if (!text) return;
+    if (
+      repeatMode === 'short' &&
+      (repeatUntil <= selectedDate || repeatUntil > shiftDate(selectedDate, MAX_SHORT_CYCLE_DAYS - 1))
+    ) {
+      setTaskMessage(t('shortCycleDeadlineError'));
+      setSyncStatus('error');
+      return;
+    }
     setIsAddingTask(true);
     setTaskMessage('');
     setSyncStatus('saving');
     await flushPendingSave();
     const link = parseTaskLink(taskLink);
-    const recurrence = repeatUnit
-      ? { unit: repeatUnit, interval: repeatInterval, endMode: repeatEndMode, ...(repeatEndMode === 'count' ? { count: repeatCount } : { until: repeatUntil }) }
-      : null;
+    const recurrence = repeatMode === 'short'
+      ? { unit: 'day', interval: 1, endMode: 'date', until: repeatUntil }
+      : repeatMode
+        ? { unit: repeatMode, interval: repeatInterval, endMode: repeatEndMode, ...(repeatEndMode === 'count' ? { count: repeatCount } : { until: repeatUntil }) }
+        : null;
+    const deadline = repeatMode === 'short' ? repeatUntil : null;
     try {
       const response = await fetch('/api/recurring-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startDate: selectedDate, text, ...link, sectionId: taskSection || null, habitCue: habitCue || null, tinyStart: tinyStart || null, identity: identity || null, recurrence }),
+        body: JSON.stringify({ startDate: selectedDate, text, ...link, sectionId: taskSection || null, deadline, habitCue: habitCue || null, tinyStart: tinyStart || null, identity: identity || null, recurrence }),
       });
       if (!response.ok) {
         throw new Error(t('taskCreateError'));
@@ -295,7 +308,10 @@ export default function Daybook({ userName }: { userName: string }) {
       setHabitCue('');
       setTinyStart('');
       setIdentity('');
-      setTaskMessage(result.count > 1 ? t('createdRecurring', { count: result.count }) : t('addedToday'));
+      setRepeatMode('');
+      setTaskMessage(repeatMode === 'short'
+        ? t('createdShortCycle', { count: result.count, date: fromDateKey(repeatUntil).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }) })
+        : result.count > 1 ? t('createdRecurring', { count: result.count }) : t('addedToday'));
       setSyncStatus('saved');
     } catch (error) {
       setTaskMessage(error instanceof Error ? error.message : t('taskCreateError'));
@@ -306,7 +322,7 @@ export default function Daybook({ userName }: { userName: string }) {
   };
 
   const beginTaskEdit = (task: Task) => {
-    setEditingTask({ id: task.id, text: task.text, cycleId: task.cycleId, phaseId: task.phaseId, sectionId: task.sectionId, recurrenceId: task.recurrenceId, habitCue: task.habitCue, tinyStart: task.tinyStart, identity: task.identity });
+    setEditingTask({ id: task.id, text: task.text, cycleId: task.cycleId, phaseId: task.phaseId, sectionId: task.sectionId, recurrenceId: task.recurrenceId, deadline: task.deadline, habitCue: task.habitCue, tinyStart: task.tinyStart, identity: task.identity });
   };
 
   const taskCycleLabel = (task: Task) => {
@@ -342,7 +358,7 @@ export default function Daybook({ userName }: { userName: string }) {
     updateEntry((current) => ({
       ...current,
       tasks: current.tasks.map((task) => task.id === editingTask.id
-        ? { ...task, text, cycleId: editingTask.cycleId, phaseId: editingTask.phaseId, sectionId: editingTask.sectionId, habitCue: editingTask.habitCue?.trim() || null, tinyStart: editingTask.tinyStart?.trim() || null, identity: editingTask.identity?.trim() || null }
+        ? { ...task, text, cycleId: editingTask.cycleId, phaseId: editingTask.phaseId, sectionId: editingTask.sectionId, deadline: editingTask.deadline, habitCue: editingTask.habitCue?.trim() || null, tinyStart: editingTask.tinyStart?.trim() || null, identity: editingTask.identity?.trim() || null }
         : task),
     }), true);
     setEditingTask(null);
@@ -523,7 +539,7 @@ export default function Daybook({ userName }: { userName: string }) {
         <>
           <div className="task-copy">
             <button className="task-text-button" type="button" onClick={() => beginTaskEdit(task)} aria-label={t('taskEdit', { task: task.text })} title={t('taskEdit', { task: task.text })} disabled={!isReady}>{task.text}</button>
-            <div className="task-meta">{taskCycleLabel(task) && <span>↳ {taskCycleLabel(task)}</span>}{task.recurrenceId && <span>↻ {t('recurring')}</span>}{task.recurrenceId && task.streak > 0 && <span className="streak-badge">{t('streak', { count: task.streak })}</span>}</div>
+            <div className="task-meta">{taskCycleLabel(task) && <span>↳ {taskCycleLabel(task)}</span>}{task.recurrenceId && !task.deadline && <span>↻ {t('recurring')}</span>}{task.deadline && <span className="deadline-badge">⌛ {t('deadlineBadge', { date: fromDateKey(task.deadline).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }) })}</span>}{task.recurrenceId && task.streak > 0 && <span className="streak-badge">{t('streak', { count: task.streak })}</span>}</div>
             {task.identity && <small className="identity-note">{t('identity', { value: task.identity })}</small>}
             {task.habitCue && <small className="habit-note">{t('cue', { value: task.habitCue })}</small>}
             {task.tinyStart && <small className="habit-note">{t('tinyStart', { value: task.tinyStart })}</small>}
@@ -588,8 +604,8 @@ export default function Daybook({ userName }: { userName: string }) {
                   <details className="task-advanced">
                     <summary>{t('repeatHabit')}</summary>
                     <div className="repeat-grid">
-                      <label><span>{t('repeatCycle')}</span><select value={repeatUnit} onChange={(event) => setRepeatUnit(event.target.value as RepeatUnit)}><option value="">{t('noRepeat')}</option><option value="day">{t('repeatDaily')}</option><option value="week">{t('repeatWeekly')}</option><option value="month">{t('repeatMonthly')}</option></select></label>
-                      {repeatUnit && <><label><span>{t('every')}</span><input type="number" min={1} max={365} value={repeatInterval} onChange={(event) => setRepeatInterval(Number(event.target.value))} /></label><label><span>{t('repeatEnds')}</span><select value={repeatEndMode} onChange={(event) => setRepeatEndMode(event.target.value as 'count' | 'date')}><option value="count">{t('repeatCountMode')}</option><option value="date">{t('repeatDateMode')}</option></select></label>{repeatEndMode === 'count' ? <label><span>{t('totalOccurrences')}</span><input type="number" min={2} max={365} value={repeatCount} onChange={(event) => setRepeatCount(Number(event.target.value))} /></label> : <label><span>{t('repeatUntil')}</span><input type="date" min={shiftDate(selectedDate, 1)} value={repeatUntil} onChange={(event) => setRepeatUntil(event.target.value)} /></label>}</>}
+                      <label><span>{t('repeatCycle')}</span><select value={repeatMode} onChange={(event) => setRepeatMode(event.target.value as RepeatMode)}><option value="">{t('noRepeat')}</option><option value="short">{t('shortCycle')}</option><option value="day">{t('repeatDaily')}</option><option value="week">{t('repeatWeekly')}</option><option value="month">{t('repeatMonthly')}</option></select></label>
+                      {repeatMode === 'short' ? <label><span>{t('deadline')}</span><input type="date" min={shiftDate(selectedDate, 1)} max={shiftDate(selectedDate, MAX_SHORT_CYCLE_DAYS - 1)} value={repeatUntil} onChange={(event) => setRepeatUntil(event.target.value)} /></label> : repeatMode && <><label><span>{t('every')}</span><input type="number" min={1} max={365} value={repeatInterval} onChange={(event) => setRepeatInterval(Number(event.target.value))} /></label><label><span>{t('repeatEnds')}</span><select value={repeatEndMode} onChange={(event) => setRepeatEndMode(event.target.value as 'count' | 'date')}><option value="count">{t('repeatCountMode')}</option><option value="date">{t('repeatDateMode')}</option></select></label>{repeatEndMode === 'count' ? <label><span>{t('totalOccurrences')}</span><input type="number" min={2} max={365} value={repeatCount} onChange={(event) => setRepeatCount(Number(event.target.value))} /></label> : <label><span>{t('repeatUntil')}</span><input type="date" min={shiftDate(selectedDate, 1)} value={repeatUntil} onChange={(event) => setRepeatUntil(event.target.value)} /></label>}</>}
                     </div>
                     <div className="habit-fields"><label><span>{t('identityHabit')}</span><input value={identity} maxLength={300} onChange={(event) => setIdentity(event.target.value)} placeholder={t('identityExample')} /></label><label><span>{t('habitCue')}</span><input value={habitCue} maxLength={300} onChange={(event) => setHabitCue(event.target.value)} placeholder={t('cueExample')} /></label><label><span>{t('twoMinute')}</span><input value={tinyStart} maxLength={300} onChange={(event) => setTinyStart(event.target.value)} placeholder={t('twoMinuteExample')} /></label></div>
                   </details>

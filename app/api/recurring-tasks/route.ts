@@ -18,13 +18,14 @@ type TaskRequest = {
   cycleId: string | null;
   phaseId: string | null;
   sectionId: string | null;
+  deadline: string | null;
   habitCue: string | null;
   tinyStart: string | null;
   identity: string | null;
   recurrence: RepeatRule;
 };
 
-type SeriesUpdateRequest = Omit<TaskRequest, 'startDate' | 'recurrence'> & {
+type SeriesUpdateRequest = Omit<TaskRequest, 'startDate' | 'recurrence' | 'deadline'> & {
   recurrenceId: string;
 };
 
@@ -74,8 +75,8 @@ export async function POST(request: Request) {
         .prepare(`
           INSERT INTO tasks
             (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-             recurrence_id, habit_cue, tiny_start, identity, position, created_at, updated_at)
-          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?,
+             recurrence_id, deadline, habit_cue, tiny_start, identity, position, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?,
             (SELECT COALESCE(MAX(position), -1) + 1 FROM tasks WHERE owner_id = ? AND date = ?),
             ?, ?)
         `)
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
           parsed.phaseId,
           parsed.sectionId,
           recurrenceId,
+          parsed.deadline,
           parsed.habitCue,
           parsed.tinyStart,
           parsed.identity,
@@ -206,6 +208,7 @@ function parseRequest(body: unknown): TaskRequest | null {
   const cycleId = optionalId(candidate.cycleId);
   const phaseId = optionalId(candidate.phaseId);
   const sectionId = optionalId(candidate.sectionId);
+  const deadline = optionalDate(candidate.deadline);
   const habitCue = optionalText(candidate.habitCue, 300);
   const tinyStart = optionalText(candidate.tinyStart, 300);
   const identity = optionalText(candidate.identity, 300);
@@ -218,6 +221,7 @@ function parseRequest(body: unknown): TaskRequest | null {
     cycleId === undefined ||
     phaseId === undefined ||
     sectionId === undefined ||
+    deadline === undefined ||
     habitCue === undefined ||
     tinyStart === undefined ||
     identity === undefined ||
@@ -226,12 +230,23 @@ function parseRequest(body: unknown): TaskRequest | null {
 
   const recurrence = parseRecurrence(candidate.recurrence, candidate.startDate);
   if (recurrence === undefined) return null;
+  if (
+    deadline !== null &&
+    (
+      recurrence === null ||
+      recurrence.unit !== 'day' ||
+      recurrence.interval !== 1 ||
+      recurrence.endMode !== 'date' ||
+      recurrence.until !== deadline
+    )
+  ) return null;
   return {
     startDate: candidate.startDate,
     text: candidate.text.trim(),
     cycleId,
     phaseId,
     sectionId,
+    deadline,
     habitCue,
     tinyStart,
     identity,
@@ -372,6 +387,12 @@ function optionalText(value: unknown, maxLength: number): string | null | undefi
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string' || value.length > maxLength) return undefined;
   return value.trim() || null;
+}
+
+function optionalDate(value: unknown): string | null | undefined {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string' || !isValidDate(value)) return undefined;
+  return value;
 }
 
 function isValidDate(value: string) {

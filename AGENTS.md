@@ -5,6 +5,7 @@ When the user asks to read or change calendar data, use the project CLI rather t
 ```bash
 npm run calendar -- get YYYY-MM-DD
 npm run calendar -- add YYYY-MM-DD "task"
+npm run calendar -- short YYYY-MM-DD "task" END_DATE
 npm run calendar -- repeat YYYY-MM-DD "task" day|week|month INTERVAL count|date COUNT|END_DATE
 npm run calendar -- toggle YYYY-MM-DD TASK_ID
 npm run calendar -- remove YYYY-MM-DD TASK_ID
