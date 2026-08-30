@@ -414,7 +414,8 @@ footer p { margin: 0; font-family: var(--font-noto-serif-tc), serif; }
   .planner-suggestions > div { max-width: 100%; display: flex; overflow-x: auto; padding-bottom: 5px; }
   .planner-suggestions button { min-width: 145px; }
   .planner-suggestions > small { margin-top: 8px; }
-  .planner-chat-card { height: 650px; }
+  .planner-chat-card { height: auto; }
+  .planner-messages { overflow-y: visible; }
 }
 
 @media (max-width: 520px) {
