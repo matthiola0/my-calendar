@@ -43,6 +43,10 @@ For LeetCode planning and attempt history:
 
 ```bash
 npm run calendar -- leetcode
+npm run calendar -- leetcode-lists
+npm run calendar -- leetcode-list-add "title"
+npm run calendar -- leetcode-list-assign PROBLEM_ID LIST_ID|none
+npm run calendar -- leetcode-list-order LIST_ID PROBLEM_ID...
 npm run calendar -- leetcode-add YYYY-MM-DD easy|medium|hard "title" [URL]
 npm run calendar -- leetcode-schedule PROBLEM_ID YYYY-MM-DD
 npm run calendar -- leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]

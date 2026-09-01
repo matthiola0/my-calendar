@@ -156,6 +156,21 @@ async function initializeSchema(db: D1Database) {
           ON custom_field_entries (owner_id, date)
         `),
         db.prepare(`
+          CREATE TABLE IF NOT EXISTS leetcode_lists (
+            id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, id)
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_leetcode_lists_owner_position
+          ON leetcode_lists (owner_id, position)
+        `),
+        db.prepare(`
           CREATE TABLE IF NOT EXISTS leetcode_problems (
             id TEXT NOT NULL,
             owner_id TEXT NOT NULL,
@@ -163,6 +178,8 @@ async function initializeSchema(db: D1Database) {
             url TEXT NOT NULL DEFAULT '',
             difficulty TEXT NOT NULL DEFAULT 'medium',
             planned_date TEXT,
+            list_id TEXT,
+            list_position INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             PRIMARY KEY (owner_id, id)
@@ -292,6 +309,18 @@ async function initializeSchema(db: D1Database) {
     await db.prepare('ALTER TABLE tasks ADD COLUMN leetcode_problem_id TEXT').run();
   }
 
+  const leetcodeProblemColumns = await db
+    .prepare('PRAGMA table_info(leetcode_problems)')
+    .all<{ name: string }>();
+  if (!leetcodeProblemColumns.results.some((column) => column.name === 'list_id')) {
+    await db.prepare('ALTER TABLE leetcode_problems ADD COLUMN list_id TEXT').run();
+  }
+  if (!leetcodeProblemColumns.results.some((column) => column.name === 'list_position')) {
+    await db
+      .prepare('ALTER TABLE leetcode_problems ADD COLUMN list_position INTEGER NOT NULL DEFAULT 0')
+      .run();
+  }
+
   const cycleColumns = await db
     .prepare('PRAGMA table_info(cycles)')
     .all<{ name: string }>();
@@ -370,6 +399,13 @@ async function initializeSchema(db: D1Database) {
     .prepare(`
       CREATE INDEX IF NOT EXISTS idx_tasks_owner_leetcode_date
       ON tasks (owner_id, leetcode_problem_id, date)
+    `)
+    .run();
+
+  await db
+    .prepare(`
+      CREATE INDEX IF NOT EXISTS idx_leetcode_problems_owner_list_position
+      ON leetcode_problems (owner_id, list_id, list_position)
     `)
     .run();
 

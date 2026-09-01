@@ -108,6 +108,22 @@ export const tasks = sqliteTable(
   ],
 );
 
+export const leetcodeLists = sqliteTable(
+  'leetcode_lists',
+  {
+    id: text('id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    title: text('title').notNull(),
+    position: integer('position').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.id] }),
+    index('idx_leetcode_lists_owner_position').on(table.ownerId, table.position),
+  ],
+);
+
 export const leetcodeProblems = sqliteTable(
   'leetcode_problems',
   {
@@ -117,12 +133,19 @@ export const leetcodeProblems = sqliteTable(
     url: text('url').notNull().default(''),
     difficulty: text('difficulty').notNull().default('medium'),
     plannedDate: text('planned_date'),
+    listId: text('list_id'),
+    listPosition: integer('list_position').notNull().default(0),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.ownerId, table.id] }),
     index('idx_leetcode_problems_owner_planned').on(table.ownerId, table.plannedDate),
+    index('idx_leetcode_problems_owner_list_position').on(
+      table.ownerId,
+      table.listId,
+      table.listPosition,
+    ),
   ],
 );
 

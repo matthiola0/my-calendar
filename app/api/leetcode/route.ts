@@ -8,12 +8,22 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 const ATTEMPT_STATUSES = new Set(['stuck', 'hinted', 'solved', 'reviewed']);
 
+type ListRow = {
+  id: string;
+  title: string;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type ProblemRow = {
   id: string;
   title: string;
   url: string;
   difficulty: string;
   plannedDate: string | null;
+  listId: string | null;
+  listPosition: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -42,13 +52,20 @@ export async function GET(request: Request) {
 
   await ensureSchema();
   const db = getDatabaseBinding();
-  const [problemRows, attemptRows, scheduleRows] = await Promise.all([
+  const [listRows, problemRows, attemptRows, scheduleRows] = await Promise.all([
+    db.prepare(`
+      SELECT id, title, position, created_at AS createdAt, updated_at AS updatedAt
+      FROM leetcode_lists
+      WHERE owner_id = ?
+      ORDER BY position, created_at
+    `).bind(ownerId).all<ListRow>(),
     db.prepare(`
       SELECT id, title, url, difficulty, planned_date AS plannedDate,
+        list_id AS listId, list_position AS listPosition,
         created_at AS createdAt, updated_at AS updatedAt
       FROM leetcode_problems
       WHERE owner_id = ?
-      ORDER BY CASE WHEN planned_date IS NULL THEN 1 ELSE 0 END, planned_date, created_at
+      ORDER BY list_position, created_at
     `).bind(ownerId).all<ProblemRow>(),
     db.prepare(`
       SELECT id, problem_id AS problemId, task_id AS taskId,
@@ -67,6 +84,7 @@ export async function GET(request: Request) {
   ]);
 
   return Response.json({
+    lists: listRows.results,
     problems: problemRows.results.map((problem) => ({
       ...problem,
       attempts: attemptRows.results.filter((attempt) => attempt.problemId === problem.id),
@@ -88,23 +106,114 @@ export async function POST(request: Request) {
 
   await ensureSchema();
   const db = getDatabaseBinding();
+  if (candidate.action === 'create-list') return createList(db, ownerId, candidate);
+  if (candidate.action === 'assign-list') return assignList(db, ownerId, candidate);
+  if (candidate.action === 'reorder-list') return reorderList(db, ownerId, candidate);
   if (candidate.action === 'schedule') return scheduleProblem(db, ownerId, candidate);
   if (candidate.action === 'attempt') return recordAttempt(db, ownerId, candidate);
   return createProblem(db, ownerId, candidate);
 }
 
-async function createProblem(db: D1Database, ownerId: string, candidate: Record<string, unknown>) {
-  const parsed = parseProblem(candidate);
-  if (!parsed) return invalid('題目名稱、難度、網址或規劃日期格式不正確。');
+async function createList(db: D1Database, ownerId: string, candidate: Record<string, unknown>) {
+  const title = typeof candidate.title === 'string' ? candidate.title.trim() : '';
+  if (!title || title.length > 100) return invalid('請輸入 1–100 字的清單名稱。');
 
   const id = crypto.randomUUID();
   const now = Date.now();
+  await db.prepare(`
+    INSERT INTO leetcode_lists (id, owner_id, title, position, created_at, updated_at)
+    VALUES (?, ?, ?,
+      (SELECT COALESCE(MAX(position), -1) + 1 FROM leetcode_lists WHERE owner_id = ?),
+      ?, ?)
+  `).bind(id, ownerId, title, ownerId, now, now).run();
+  return Response.json({ ok: true, id }, { status: 201 });
+}
+
+async function assignList(db: D1Database, ownerId: string, candidate: Record<string, unknown>) {
+  const problemId = optionalId(candidate.problemId);
+  const listId = optionalId(candidate.listId);
+  if (!problemId || listId === undefined) return invalid('題目或清單格式不正確。');
+
+  const problem = await db.prepare(
+    'SELECT id, list_id AS listId FROM leetcode_problems WHERE owner_id = ? AND id = ?',
+  ).bind(ownerId, problemId).first<{ id: string; listId: string | null }>();
+  if (!problem) return Response.json({ error: '找不到這道題目。' }, { status: 404 });
+  if (problem.listId === listId) return Response.json({ ok: true, changed: false });
+  if (listId && !(await ownsList(db, ownerId, listId))) {
+    return Response.json({ error: '找不到這份清單。' }, { status: 404 });
+  }
+
+  const position = await nextProblemPosition(db, ownerId, listId);
+  await db.prepare(`
+    UPDATE leetcode_problems
+    SET list_id = ?, list_position = ?, updated_at = ?
+    WHERE owner_id = ? AND id = ?
+  `).bind(listId, position, Date.now(), ownerId, problemId).run();
+  return Response.json({ ok: true, changed: true });
+}
+
+async function reorderList(db: D1Database, ownerId: string, candidate: Record<string, unknown>) {
+  const listId = optionalId(candidate.listId);
+  const rawProblemIds = candidate.problemIds;
+  const problemIds = Array.isArray(rawProblemIds)
+    ? rawProblemIds.filter((value): value is string => typeof value === 'string' && value.length > 0 && value.length <= 100)
+    : null;
+  const rawProblemIdCount = Array.isArray(rawProblemIds) ? rawProblemIds.length : -1;
+  if (!listId || !problemIds || problemIds.length !== rawProblemIdCount || new Set(problemIds).size !== problemIds.length) {
+    return invalid('清單或題目順序格式不正確。');
+  }
+  if (!(await ownsList(db, ownerId, listId))) {
+    return Response.json({ error: '找不到這份清單。' }, { status: 404 });
+  }
+
+  const current = await db.prepare(`
+    SELECT id FROM leetcode_problems
+    WHERE owner_id = ? AND list_id = ?
+  `).bind(ownerId, listId).all<{ id: string }>();
+  const expected = new Set(current.results.map((problem) => problem.id));
+  if (expected.size !== problemIds.length || problemIds.some((id) => !expected.has(id))) {
+    return invalid('題目順序必須完整包含這份清單的所有題目。');
+  }
+
+  const now = Date.now();
+  if (problemIds.length) {
+    await db.batch(problemIds.map((id, position) => db.prepare(`
+      UPDATE leetcode_problems
+      SET list_position = ?, updated_at = ?
+      WHERE owner_id = ? AND id = ? AND list_id = ?
+    `).bind(position, now, ownerId, id, listId)));
+  }
+  return Response.json({ ok: true });
+}
+
+async function createProblem(db: D1Database, ownerId: string, candidate: Record<string, unknown>) {
+  const parsed = parseProblem(candidate);
+  if (!parsed) return invalid('題目名稱、難度、網址、清單或規劃日期格式不正確。');
+  if (parsed.listId && !(await ownsList(db, ownerId, parsed.listId))) {
+    return Response.json({ error: '找不到這份清單。' }, { status: 404 });
+  }
+
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const listPosition = await nextProblemPosition(db, ownerId, parsed.listId);
   const statements: D1PreparedStatement[] = [
     db.prepare(`
       INSERT INTO leetcode_problems
-        (id, owner_id, title, url, difficulty, planned_date, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, ownerId, parsed.title, parsed.url, parsed.difficulty, parsed.plannedDate, now, now),
+        (id, owner_id, title, url, difficulty, planned_date, list_id, list_position,
+         created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      ownerId,
+      parsed.title,
+      parsed.url,
+      parsed.difficulty,
+      parsed.plannedDate,
+      parsed.listId,
+      listPosition,
+      now,
+      now,
+    ),
   ];
   let taskId: string | null = null;
   if (parsed.plannedDate) {
@@ -213,6 +322,25 @@ async function recordAttempt(db: D1Database, ownerId: string, candidate: Record<
   return Response.json({ ok: true, id, revision }, { status: 201 });
 }
 
+async function ownsList(db: D1Database, ownerId: string, listId: string) {
+  return Boolean(await db.prepare(
+    'SELECT id FROM leetcode_lists WHERE owner_id = ? AND id = ?',
+  ).bind(ownerId, listId).first());
+}
+
+async function nextProblemPosition(db: D1Database, ownerId: string, listId: string | null) {
+  const row = listId
+    ? await db.prepare(`
+        SELECT COALESCE(MAX(list_position), -1) + 1 AS position
+        FROM leetcode_problems WHERE owner_id = ? AND list_id = ?
+      `).bind(ownerId, listId).first<{ position: number }>()
+    : await db.prepare(`
+        SELECT COALESCE(MAX(list_position), -1) + 1 AS position
+        FROM leetcode_problems WHERE owner_id = ? AND list_id IS NULL
+      `).bind(ownerId).first<{ position: number }>();
+  return row?.position ?? 0;
+}
+
 function upsertDayEntry(db: D1Database, ownerId: string, date: string, revision: string, now: number) {
   return db.prepare(`
     INSERT INTO day_entries (owner_id, date, activity, reflection, revision, updated_at)
@@ -251,6 +379,7 @@ function parseProblem(candidate: Record<string, unknown>) {
     : typeof candidate.plannedDate === 'string' && isValidDate(candidate.plannedDate)
       ? candidate.plannedDate
       : undefined;
+  const listId = optionalId(candidate.listId);
   let url = typeof candidate.url === 'string' ? candidate.url.trim() : '';
   if (url) {
     try {
@@ -261,8 +390,8 @@ function parseProblem(candidate: Record<string, unknown>) {
       return null;
     }
   }
-  if (!title || title.length > 200 || !difficulty || plannedDate === undefined || url.length > 500) return null;
-  return { title, difficulty, plannedDate, url };
+  if (!title || title.length > 200 || !difficulty || plannedDate === undefined || listId === undefined || url.length > 500) return null;
+  return { title, difficulty, plannedDate, listId, url };
 }
 
 function optionalId(value: unknown): string | null | undefined {

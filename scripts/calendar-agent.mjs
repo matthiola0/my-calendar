@@ -344,6 +344,43 @@ switch (command) {
     console.log(JSON.stringify(result.problems, null, 2));
     break;
   }
+  case 'leetcode-lists': {
+    const result = await request('/api/leetcode');
+    console.log(JSON.stringify(result.lists, null, 2));
+    break;
+  }
+  case 'leetcode-list-add': {
+    const title = args.join(' ').trim();
+    if (!title) fail('Usage: npm run calendar -- leetcode-list-add "title"');
+    const result = await request('/api/leetcode', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'create-list', title }),
+    });
+    console.log(`Created LeetCode list ${result.id}: ${title}`);
+    break;
+  }
+  case 'leetcode-list-assign': {
+    const [problemId, listId] = args;
+    if (!problemId || !listId) fail('Usage: npm run calendar -- leetcode-list-assign PROBLEM_ID LIST_ID|none');
+    await request('/api/leetcode', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'assign-list', problemId, listId: listId === 'none' ? null : listId }),
+    });
+    console.log(`Updated the list for LeetCode problem ${problemId}.`);
+    break;
+  }
+  case 'leetcode-list-order': {
+    const [listId, ...problemIds] = args;
+    if (!listId || !problemIds.length) {
+      fail('Usage: npm run calendar -- leetcode-list-order LIST_ID PROBLEM_ID...');
+    }
+    await request('/api/leetcode', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'reorder-list', listId, problemIds }),
+    });
+    console.log(`Saved the custom order for LeetCode list ${listId}.`);
+    break;
+  }
   case 'leetcode-add': {
     const [date, difficulty, title, url = ''] = args;
     if (!date || !['easy', 'medium', 'hard'].includes(difficulty) || !title) {
@@ -461,6 +498,10 @@ Daily layout and custom records:
   console.log(`
 LeetCode database:
   leetcode
+  leetcode-lists
+  leetcode-list-add "title"
+  leetcode-list-assign PROBLEM_ID LIST_ID|none
+  leetcode-list-order LIST_ID PROBLEM_ID...
   leetcode-add YYYY-MM-DD easy|medium|hard "title" [URL]
   leetcode-schedule PROBLEM_ID YYYY-MM-DD
   leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]`);
