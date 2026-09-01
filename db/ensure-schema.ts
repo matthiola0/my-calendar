@@ -100,6 +100,7 @@ async function initializeSchema(db: D1Database) {
             habit_cue TEXT,
             tiny_start TEXT,
             identity TEXT,
+            leetcode_problem_id TEXT,
             position INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
@@ -153,6 +154,50 @@ async function initializeSchema(db: D1Database) {
         db.prepare(`
           CREATE INDEX IF NOT EXISTS idx_custom_field_entries_owner_date
           ON custom_field_entries (owner_id, date)
+        `),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS leetcode_problems (
+            id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            url TEXT NOT NULL DEFAULT '',
+            difficulty TEXT NOT NULL DEFAULT 'medium',
+            planned_date TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, id)
+          )
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_leetcode_problems_owner_planned
+          ON leetcode_problems (owner_id, planned_date)
+        `),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS leetcode_attempts (
+            id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            problem_id TEXT NOT NULL,
+            task_id TEXT,
+            attempted_on TEXT NOT NULL,
+            status TEXT NOT NULL,
+            notes TEXT NOT NULL DEFAULT '',
+            attempt_number INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (owner_id, id)
+          )
+        `),
+        db.prepare(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_leetcode_attempts_owner_problem_number
+          ON leetcode_attempts (owner_id, problem_id, attempt_number)
+        `),
+        db.prepare(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_leetcode_attempts_owner_task
+          ON leetcode_attempts (owner_id, task_id)
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_leetcode_attempts_owner_date
+          ON leetcode_attempts (owner_id, attempted_on)
         `),
         db.prepare(`
           CREATE TABLE IF NOT EXISTS cycles (
@@ -243,6 +288,9 @@ async function initializeSchema(db: D1Database) {
   if (!taskColumns.results.some((column) => column.name === 'identity')) {
     await db.prepare('ALTER TABLE tasks ADD COLUMN identity TEXT').run();
   }
+  if (!taskColumns.results.some((column) => column.name === 'leetcode_problem_id')) {
+    await db.prepare('ALTER TABLE tasks ADD COLUMN leetcode_problem_id TEXT').run();
+  }
 
   const cycleColumns = await db
     .prepare('PRAGMA table_info(cycles)')
@@ -278,6 +326,7 @@ async function initializeSchema(db: D1Database) {
           habit_cue TEXT,
           tiny_start TEXT,
           identity TEXT,
+          leetcode_problem_id TEXT,
           position INTEGER NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
@@ -287,9 +336,11 @@ async function initializeSchema(db: D1Database) {
       db.prepare(`
         INSERT INTO tasks_owner_scoped
           (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-           recurrence_id, deadline, habit_cue, tiny_start, identity, position, created_at, updated_at)
+           recurrence_id, deadline, habit_cue, tiny_start, identity, leetcode_problem_id,
+           position, created_at, updated_at)
         SELECT id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-          recurrence_id, deadline, habit_cue, tiny_start, identity, position, created_at, updated_at
+          recurrence_id, deadline, habit_cue, tiny_start, identity, leetcode_problem_id,
+          position, created_at, updated_at
         FROM tasks
       `),
       db.prepare('DROP TABLE tasks'),
@@ -312,6 +363,13 @@ async function initializeSchema(db: D1Database) {
     .prepare(`
       CREATE INDEX IF NOT EXISTS idx_tasks_owner_recurrence_date
       ON tasks (owner_id, recurrence_id, date)
+    `)
+    .run();
+
+  await db
+    .prepare(`
+      CREATE INDEX IF NOT EXISTS idx_tasks_owner_leetcode_date
+      ON tasks (owner_id, leetcode_problem_id, date)
     `)
     .run();
 

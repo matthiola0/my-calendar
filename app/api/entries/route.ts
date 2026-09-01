@@ -18,6 +18,7 @@ type Task = {
   habitCue: string | null;
   tinyStart: string | null;
   identity: string | null;
+  leetcodeProblemId: string | null;
   streak: number;
   recoveryDue: boolean;
 };
@@ -42,6 +43,7 @@ type TaskRow = {
   habitCue: string | null;
   tinyStart: string | null;
   identity: string | null;
+  leetcodeProblemId: string | null;
 };
 
 type SeriesRow = {
@@ -69,7 +71,8 @@ export async function GET(request: Request) {
     .prepare(
       `SELECT id, date, text, done, cycle_id AS cycleId, phase_id AS phaseId,
         section_id AS sectionId, recurrence_id AS recurrenceId,
-        deadline, habit_cue AS habitCue, tiny_start AS tinyStart, identity
+        deadline, habit_cue AS habitCue, tiny_start AS tinyStart, identity,
+        leetcode_problem_id AS leetcodeProblemId
        FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC`,
     )
     .bind(ownerId, date)
@@ -90,6 +93,7 @@ export async function GET(request: Request) {
         habitCue: task.habitCue,
         tinyStart: task.tinyStart,
         identity: task.identity,
+        leetcodeProblemId: task.leetcodeProblemId,
         streak: task.recurrenceId && !task.deadline ? seriesStats.get(`${task.recurrenceId}:${date}`)?.streak ?? 0 : 0,
         recoveryDue: task.recurrenceId && !task.deadline ? seriesStats.get(`${task.recurrenceId}:${date}`)?.recoveryDue ?? false : false,
       })),
@@ -168,8 +172,9 @@ export async function PUT(request: Request) {
         .prepare(`
           INSERT INTO tasks
             (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-             recurrence_id, deadline, habit_cue, tiny_start, identity, position, created_at, updated_at)
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+             recurrence_id, deadline, habit_cue, tiny_start, identity, leetcode_problem_id,
+             position, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE EXISTS (
             SELECT 1 FROM day_entries
             WHERE owner_id = ? AND date = ? AND revision = ?
@@ -189,6 +194,7 @@ export async function PUT(request: Request) {
           task.habitCue,
           task.tinyStart,
           task.identity,
+          task.leetcodeProblemId,
           position,
           now,
           now,
@@ -244,6 +250,7 @@ function parseEntry(body: unknown):
     const habitCue = task.habitCue === undefined ? null : task.habitCue;
     const tinyStart = task.tinyStart === undefined ? null : task.tinyStart;
     const identity = task.identity === undefined ? null : task.identity;
+    const leetcodeProblemId = task.leetcodeProblemId === undefined ? null : task.leetcodeProblemId;
     if (
       typeof task.id !== 'string' ||
       task.id.length < 1 ||
@@ -262,6 +269,7 @@ function parseEntry(body: unknown):
       (habitCue !== null && (typeof habitCue !== 'string' || habitCue.length > 300)) ||
       (tinyStart !== null && (typeof tinyStart !== 'string' || tinyStart.length > 300)) ||
       (identity !== null && (typeof identity !== 'string' || identity.length > 300))
+      || (leetcodeProblemId !== null && (typeof leetcodeProblemId !== 'string' || leetcodeProblemId.length < 1 || leetcodeProblemId.length > 100))
     ) {
       return { ok: false, error: '待辦項目內容不正確。' };
     }
@@ -278,6 +286,7 @@ function parseEntry(body: unknown):
       habitCue: typeof habitCue === 'string' && habitCue.trim() ? habitCue.trim() : null,
       tinyStart: typeof tinyStart === 'string' && tinyStart.trim() ? tinyStart.trim() : null,
       identity: typeof identity === 'string' && identity.trim() ? identity.trim() : null,
+      leetcodeProblemId,
       streak: 0,
       recoveryDue: false,
     });
@@ -337,22 +346,25 @@ async function loadSeriesStats(db: D1Database, ownerId: string, tasks: TaskRow[]
 }
 
 async function taskReferencesAreValid(db: D1Database, ownerId: string, tasks: Task[]) {
-  const [cycleRows, phaseRows, sectionRows] = await Promise.all([
+  const [cycleRows, phaseRows, sectionRows, problemRows] = await Promise.all([
     db.prepare('SELECT id FROM cycles WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
     db
       .prepare('SELECT id, cycle_id AS cycleId FROM cycle_phases WHERE owner_id = ?')
       .bind(ownerId)
       .all<{ id: string; cycleId: string }>(),
     db.prepare('SELECT id FROM day_sections WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
+    db.prepare('SELECT id FROM leetcode_problems WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
   ]);
   const cycleIds = new Set(cycleRows.results.map((cycle) => cycle.id));
   const phaseCycles = new Map(phaseRows.results.map((phase) => [phase.id, phase.cycleId]));
   const sectionIds = new Set(sectionRows.results.map((section) => section.id));
+  const problemIds = new Set(problemRows.results.map((problem) => problem.id));
 
   const referencesAreValid = tasks.every((task) =>
     (task.cycleId === null || cycleIds.has(task.cycleId)) &&
     (task.phaseId === null || phaseCycles.get(task.phaseId) === task.cycleId) &&
-    (task.sectionId === null || sectionIds.has(task.sectionId)),
+    (task.sectionId === null || sectionIds.has(task.sectionId)) &&
+    (task.leetcodeProblemId === null || problemIds.has(task.leetcodeProblemId)),
   );
   if (!referencesAreValid) return false;
 

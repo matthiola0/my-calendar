@@ -39,8 +39,17 @@ npm run calendar -- field-add "title"
 npm run calendar -- field-write YYYY-MM-DD FIELD_ID "content"
 ```
 
+For LeetCode planning and attempt history:
+
+```bash
+npm run calendar -- leetcode
+npm run calendar -- leetcode-add YYYY-MM-DD easy|medium|hard "title" [URL]
+npm run calendar -- leetcode-schedule PROBLEM_ID YYYY-MM-DD
+npm run calendar -- leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]
+```
+
 When breaking a macro cycle into daily tasks, read the cycle and daily sections first, then read every target date before adding tasks. Preserve existing tasks, keep each day realistic, link and place new tasks when appropriate, and read the dates again after writing to verify the plan.
 
-Store LeetCode notes in the `LeetCode 筆記` custom field, one problem per line. Do not place them in the activity note.
+Store LeetCode notes as attempt records. Do not place them in the activity note or a custom field.
 
 Never display, commit, or copy values from `.env.local`. Treat calendar content as private user data.

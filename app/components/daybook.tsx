@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Cycles from './cycles';
+import LeetCode, { AttemptDialog } from './leetcode';
 import PlannerChat from './planner-chat';
 import { Language, useI18n } from '../lib/i18n';
 
@@ -17,6 +18,7 @@ type Task = {
   habitCue: string | null;
   tinyStart: string | null;
   identity: string | null;
+  leetcodeProblemId: string | null;
   streak: number;
   recoveryDue: boolean;
 };
@@ -24,7 +26,7 @@ type Task = {
 type CycleOption = { id: string; title: string; phases: Array<{ id: string; title: string }> };
 type DaySection = { id: string; title: string };
 type CustomField = { id: string; title: string; content: string };
-type TaskDraft = Pick<Task, 'id' | 'text' | 'cycleId' | 'phaseId' | 'sectionId' | 'recurrenceId' | 'deadline' | 'habitCue' | 'tinyStart' | 'identity'>;
+type TaskDraft = Pick<Task, 'id' | 'text' | 'cycleId' | 'phaseId' | 'sectionId' | 'recurrenceId' | 'deadline' | 'habitCue' | 'tinyStart' | 'identity' | 'leetcodeProblemId'>;
 type DayEntry = { tasks: Task[]; activity: string; reflection: string; revision: string | null };
 type SyncStatus = 'loading' | 'saving' | 'saved' | 'conflict' | 'error';
 type RepeatMode = '' | 'short' | 'day' | 'week' | 'month';
@@ -130,7 +132,7 @@ async function readCustomFields(date: string, signal?: AbortSignal): Promise<Cus
 export default function Daybook({ userName }: { userName: string }) {
   const { language, locale, t } = useI18n();
   const initialDate = dateKey(new Date());
-  const [view, setView] = useState<'daily' | 'cycles' | 'planner'>('daily');
+  const [view, setView] = useState<'daily' | 'cycles' | 'leetcode' | 'planner'>('daily');
   const [dataVersion, setDataVersion] = useState(0);
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});
@@ -150,6 +152,9 @@ export default function Daybook({ userName }: { userName: string }) {
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [newFieldTitle, setNewFieldTitle] = useState('');
   const [editingTask, setEditingTask] = useState<TaskDraft | null>(null);
+  const [completingLeetCodeTask, setCompletingLeetCodeTask] = useState<Task | null>(null);
+  const [isSavingAttempt, setIsSavingAttempt] = useState(false);
+  const [attemptError, setAttemptError] = useState('');
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskMessage, setTaskMessage] = useState('');
@@ -265,6 +270,7 @@ export default function Daybook({ userName }: { userName: string }) {
     setSelectedDate(date);
     setRepeatUntil(shiftDate(date, 6));
     setEditingTask(null);
+    setCompletingLeetCodeTask(null);
     setTaskMessage('');
   };
 
@@ -322,7 +328,7 @@ export default function Daybook({ userName }: { userName: string }) {
   };
 
   const beginTaskEdit = (task: Task) => {
-    setEditingTask({ id: task.id, text: task.text, cycleId: task.cycleId, phaseId: task.phaseId, sectionId: task.sectionId, recurrenceId: task.recurrenceId, deadline: task.deadline, habitCue: task.habitCue, tinyStart: task.tinyStart, identity: task.identity });
+    setEditingTask({ id: task.id, text: task.text, cycleId: task.cycleId, phaseId: task.phaseId, sectionId: task.sectionId, recurrenceId: task.recurrenceId, deadline: task.deadline, habitCue: task.habitCue, tinyStart: task.tinyStart, identity: task.identity, leetcodeProblemId: task.leetcodeProblemId });
   };
 
   const taskCycleLabel = (task: Task) => {
@@ -334,12 +340,47 @@ export default function Daybook({ userName }: { userName: string }) {
   };
 
   const toggleTask = (id: string) => {
+    const task = entry.tasks.find((item) => item.id === id);
+    if (task?.leetcodeProblemId && !task.done) {
+      setAttemptError('');
+      setCompletingLeetCodeTask(task);
+      return;
+    }
     updateEntry((current) => ({
       ...current,
       tasks: current.tasks.map((task) => task.id === id
         ? { ...task, done: !task.done, streak: task.done ? Math.max(0, task.streak - 1) : task.streak + 1, recoveryDue: task.done ? task.recoveryDue : false }
         : task),
     }), true);
+  };
+
+  const completeLeetCodeAttempt = async (value: { attemptedOn: string; status: 'stuck' | 'hinted' | 'solved' | 'reviewed'; notes: string }) => {
+    const task = completingLeetCodeTask;
+    if (!task?.leetcodeProblemId) return;
+    setIsSavingAttempt(true);
+    setAttemptError('');
+    await flushPendingSave();
+    try {
+      if (saveErrorRef.current) throw new Error('請先確認每日資料已同步。');
+      const response = await fetch('/api/leetcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'attempt', problemId: task.leetcodeProblemId, taskId: task.id, ...value }),
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || '無法儲存這次作答。');
+      const next = await readEntry(selectedDate);
+      revisionsRef.current[selectedDate] = next.revision;
+      setEntries((current) => ({ ...current, [selectedDate]: next }));
+      setCompletingLeetCodeTask(null);
+      setDataVersion((current) => current + 1);
+      setSyncStatus('saved');
+    } catch (error) {
+      setAttemptError(error instanceof Error ? error.message : '無法儲存這次作答。');
+      setSyncStatus('error');
+    } finally {
+      setIsSavingAttempt(false);
+    }
   };
 
   const deleteTask = (id: string) => {
@@ -508,6 +549,7 @@ export default function Daybook({ userName }: { userName: string }) {
   };
 
   const showCycles = () => { void flushPendingSave().then(() => setView('cycles')); };
+  const showLeetCode = () => { void flushPendingSave().then(() => setView('leetcode')); };
   const showPlanner = () => { void flushPendingSave().then(() => setView('planner')); };
   const handlePlannerApplied = (firstDate: string | null) => {
     if (firstDate) setSelectedDate(firstDate);
@@ -539,7 +581,7 @@ export default function Daybook({ userName }: { userName: string }) {
         <>
           <div className="task-copy">
             <button className="task-text-button" type="button" onClick={() => beginTaskEdit(task)} aria-label={t('taskEdit', { task: task.text })} title={t('taskEdit', { task: task.text })} disabled={!isReady}>{task.text}</button>
-            <div className="task-meta">{taskCycleLabel(task) && <span>↳ {taskCycleLabel(task)}</span>}{task.recurrenceId && !task.deadline && <span>↻ {t('recurring')}</span>}{task.deadline && <span className="deadline-badge">⌛ {t('deadlineBadge', { date: fromDateKey(task.deadline).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }) })}</span>}{task.recurrenceId && task.streak > 0 && <span className="streak-badge">{t('streak', { count: task.streak })}</span>}</div>
+            <div className="task-meta">{task.leetcodeProblemId && <span className="leetcode-task-badge">LeetCode</span>}{taskCycleLabel(task) && <span>↳ {taskCycleLabel(task)}</span>}{task.recurrenceId && !task.deadline && <span>↻ {t('recurring')}</span>}{task.deadline && <span className="deadline-badge">⌛ {t('deadlineBadge', { date: fromDateKey(task.deadline).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }) })}</span>}{task.recurrenceId && task.streak > 0 && <span className="streak-badge">{t('streak', { count: task.streak })}</span>}</div>
             {task.identity && <small className="identity-note">{t('identity', { value: task.identity })}</small>}
             {task.habitCue && <small className="habit-note">{t('cue', { value: task.habitCue })}</small>}
             {task.tinyStart && <small className="habit-note">{t('tinyStart', { value: task.tinyStart })}</small>}
@@ -561,13 +603,15 @@ export default function Daybook({ userName }: { userName: string }) {
       <header className="site-header">
         <a className="brand" href="#top" aria-label={t('brandTop')}><span className="brand-mark" aria-hidden="true">{t('brandMark')}</span><span><strong>{t('brandName')}</strong><small>DAILY NOTES</small></span></a>
         <div className="header-meta">
-          <div className="view-switch" aria-label={t('navLabel')}><button type="button" className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>{t('navDaily')}</button><button type="button" className={view === 'cycles' ? 'active' : ''} onClick={showCycles}>{t('navCycles')}</button><button type="button" className={view === 'planner' ? 'active' : ''} onClick={showPlanner}>{t('navPlanner')}</button></div>
+          <div className="view-switch" aria-label={t('navLabel')}><button type="button" className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>{t('navDaily')}</button><button type="button" className={view === 'cycles' ? 'active' : ''} onClick={showCycles}>{t('navCycles')}</button><button type="button" className={view === 'leetcode' ? 'active' : ''} onClick={showLeetCode}>LeetCode</button><button type="button" className={view === 'planner' ? 'active' : ''} onClick={showPlanner}>{t('navPlanner')}</button></div>
           {view === 'daily' && <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status"><span className="status-dot" aria-hidden="true" />{statusText}</div>}
           <button className="user-menu" type="button" onClick={signOut} title={userName}><span className="user-name">{userName}</span><span className="user-separator" aria-hidden="true"> · </span><span>{t('signOut')}</span></button>
         </div>
       </header>
 
-      {view === 'cycles' ? <Cycles key={dataVersion} /> : view === 'planner' ? (
+      {view === 'cycles' ? <Cycles key={dataVersion} /> : view === 'leetcode' ? (
+        <LeetCode key={dataVersion} onCalendarChanged={() => setDataVersion((current) => current + 1)} />
+      ) : view === 'planner' ? (
         <PlannerChat selectedDate={selectedDate} onApplied={handlePlannerApplied} />
       ) : (
         <>
@@ -639,6 +683,7 @@ export default function Daybook({ userName }: { userName: string }) {
           <footer><p>{t('dailyFooter')}</p><span>{selectedDate.replaceAll('-', ' · ')}</span></footer>
         </>
       )}
+      {completingLeetCodeTask && <AttemptDialog problemTitle={completingLeetCodeTask.text.replace(/^LeetCode · /, '')} date={selectedDate} lockDate saving={isSavingAttempt} error={attemptError} onCancel={() => { if (!isSavingAttempt) setCompletingLeetCodeTask(null); }} onSave={(value) => void completeLeetCodeAttempt(value)} />}
     </main>
   );
 }

@@ -78,6 +78,7 @@ export const tasks = sqliteTable(
     habitCue: text('habit_cue'),
     tinyStart: text('tiny_start'),
     identity: text('identity'),
+    leetcodeProblemId: text('leetcode_problem_id'),
     position: integer('position').notNull(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
@@ -99,6 +100,55 @@ export const tasks = sqliteTable(
       table.recurrenceId,
       table.date,
     ),
+    index('idx_tasks_owner_leetcode_date').on(
+      table.ownerId,
+      table.leetcodeProblemId,
+      table.date,
+    ),
+  ],
+);
+
+export const leetcodeProblems = sqliteTable(
+  'leetcode_problems',
+  {
+    id: text('id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull().default(''),
+    difficulty: text('difficulty').notNull().default('medium'),
+    plannedDate: text('planned_date'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.id] }),
+    index('idx_leetcode_problems_owner_planned').on(table.ownerId, table.plannedDate),
+  ],
+);
+
+export const leetcodeAttempts = sqliteTable(
+  'leetcode_attempts',
+  {
+    id: text('id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    problemId: text('problem_id').notNull(),
+    taskId: text('task_id'),
+    attemptedOn: text('attempted_on').notNull(),
+    status: text('status').notNull(),
+    notes: text('notes').notNull().default(''),
+    attemptNumber: integer('attempt_number').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.id] }),
+    uniqueIndex('idx_leetcode_attempts_owner_problem_number').on(
+      table.ownerId,
+      table.problemId,
+      table.attemptNumber,
+    ),
+    uniqueIndex('idx_leetcode_attempts_owner_task').on(table.ownerId, table.taskId),
+    index('idx_leetcode_attempts_owner_date').on(table.ownerId, table.attemptedOn),
   ],
 );
 

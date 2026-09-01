@@ -339,6 +339,45 @@ switch (command) {
     console.log(`Updated custom field for ${date}.`);
     break;
   }
+  case 'leetcode': {
+    const result = await request('/api/leetcode');
+    console.log(JSON.stringify(result.problems, null, 2));
+    break;
+  }
+  case 'leetcode-add': {
+    const [date, difficulty, title, url = ''] = args;
+    if (!date || !['easy', 'medium', 'hard'].includes(difficulty) || !title) {
+      fail('Usage: npm run calendar -- leetcode-add YYYY-MM-DD easy|medium|hard "title" [URL]');
+    }
+    const result = await request('/api/leetcode', {
+      method: 'POST',
+      body: JSON.stringify({ title, url, difficulty, plannedDate: date }),
+    });
+    console.log(`Created LeetCode problem ${result.id} and planned it for ${date}.`);
+    break;
+  }
+  case 'leetcode-schedule': {
+    const [problemId, date] = args;
+    if (!problemId || !date) fail('Usage: npm run calendar -- leetcode-schedule PROBLEM_ID YYYY-MM-DD');
+    const result = await request('/api/leetcode', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'schedule', problemId, date }),
+    });
+    console.log(result.created ? `Planned LeetCode problem for ${date}.` : `Problem was already planned for ${date}.`);
+    break;
+  }
+  case 'leetcode-attempt': {
+    const [problemId, date, status, notes, taskId = null] = args;
+    if (!problemId || !date || !['stuck', 'hinted', 'solved', 'reviewed'].includes(status) || !notes) {
+      fail('Usage: npm run calendar -- leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]');
+    }
+    await request('/api/leetcode', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'attempt', problemId, attemptedOn: date, status, notes, taskId }),
+    });
+    console.log(`Recorded LeetCode attempt for ${date}.`);
+    break;
+  }
   default:
     printHelp();
 }
@@ -419,6 +458,12 @@ Daily layout and custom records:
   fields       YYYY-MM-DD
   field-add    "title"
   field-write  YYYY-MM-DD FIELD_ID "content"`);
+  console.log(`
+LeetCode database:
+  leetcode
+  leetcode-add YYYY-MM-DD easy|medium|hard "title" [URL]
+  leetcode-schedule PROBLEM_ID YYYY-MM-DD
+  leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]`);
   process.exit(1);
 }
 
