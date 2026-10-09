@@ -32,6 +32,7 @@ export type ProposedTaskLink =
   };
 
 export type ProposedTask = {
+  leetcodeProblemId?: string | null;
   date: string;
   text: string;
   sectionId: string | null;
@@ -52,4 +53,3 @@ export type PlannerReply = {
   questions: string[];
   proposal: PlannerProposal | null;
 };
-

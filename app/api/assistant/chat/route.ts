@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
   try {
     const range = await choosePlanningRange(parsed.messages, parsed.currentDate);
-    const context = await loadPlanningContext(ownerId, range.startDate, range.endDate);
+    const context = await loadPlanningContext(ownerId, range.startDate, range.endDate, parsed.includePractice ? parsed.currentDate : undefined);
     const reply = await createPlannerReply(
       parsed.messages,
       parsed.currentDate,
@@ -50,9 +50,11 @@ function parseRequest(body: unknown): {
   currentDate: string;
   timezone: string;
   language: 'en' | 'zh' | 'ja';
+  includePractice: boolean;
 } | null {
   if (!body || typeof body !== 'object') return null;
   const candidate = body as Record<string, unknown>;
+  if (candidate.includePractice !== undefined && typeof candidate.includePractice !== 'boolean') return null;
   if (
     !Array.isArray(candidate.messages) ||
     candidate.messages.length < 1 ||
@@ -85,6 +87,7 @@ function parseRequest(body: unknown): {
     currentDate: candidate.currentDate,
     timezone: candidate.timezone,
     language: candidate.language,
+    includePractice: candidate.includePractice === true,
   };
 }
 

@@ -29,6 +29,14 @@ The conversation remains in the current browser page and is cleared by navigatio
 
 ## Data and safety boundaries
 
+### Adaptive interview practice
+
+Choose **Plan four weeks of interview prep** to describe your deadline, current level, and weekly time budget. The planner proposes phases and a manageable first week rather than claiming to predict an entire month of progress.
+
+Enable **Use my practice history** to include the 30 days ending on the selected date: at most 60 recent LeetCode attempts, 500 characters of notes per attempt, and 100 practice sessions. This is opt-in; ordinary planning requests do not load these records. Changing the option clears the conversation so earlier practice context is not carried into a new session.
+
+**Adjust my next practice week** asks the model to explain recommendations using dated attempts, distinguish missed sessions from failed attempts, and leave room for reviews and buffer time. Proposed review tasks link to existing problems, so completing them opens the existing attempt-recording dialog. Every link is checked against the authenticated owner's problems again before applying. Existing tasks are preserved; this does not automatically reschedule or delete them. Model suggestions and duration estimates still require user review.
+
 - The provider API key exists only in the server environment.
 - The model has no database credentials, agent credentials, or SQL access.
 - The model returns structured data. The server validates every field, date, length, day section, and macro-cycle link.

@@ -189,8 +189,8 @@ export default function Daybook({ userName }: { userName: string }) {
     if (view !== 'daily') return;
     let active = true;
     Promise.all([
-      fetch('/api/cycles', { cache: 'no-store' }).then((response) => response.ok ? response.json() : Promise.reject()),
-      fetch('/api/day-sections', { cache: 'no-store' }).then((response) => response.ok ? response.json() : Promise.reject()),
+      fetch('/api/cycles', { cache: 'no-store' }).then((response) => response.ok ? response.json() as Promise<{ cycles: CycleOption[] }> : Promise.reject()),
+      fetch('/api/day-sections', { cache: 'no-store' }).then((response) => response.ok ? response.json() as Promise<{ sections: DaySection[] }> : Promise.reject()),
     ])
       .then(([cycleResult, sectionResult]: [{ cycles: CycleOption[] }, { sections: DaySection[] }]) => {
         if (!active) return;

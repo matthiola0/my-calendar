@@ -2,6 +2,7 @@ import { ensureSchema } from '../../db/ensure-schema';
 import { getDatabaseBinding } from '../../db';
 import type { PlanningContext } from './planner-ai';
 import type { PlannerProposal, ProposedTask } from './planner-types';
+import { loadPracticeContext, ownsPracticeProblems } from './planner-practice';
 
 type CycleRow = {
   id: string;
@@ -39,6 +40,7 @@ export async function loadPlanningContext(
   ownerId: string,
   startDate: string,
   endDate: string,
+  practiceDate?: string,
 ): Promise<PlanningContext> {
   await ensureSchema();
   const db = getDatabaseBinding();
@@ -121,6 +123,7 @@ export async function loadPlanningContext(
   }
 
   return {
+    ...(practiceDate ? { practice: await loadPracticeContext(db, ownerId, practiceDate) } : {}),
     range: { startDate, endDate },
     days,
     cycles: cycleRows.results.map((cycle) => ({
@@ -136,6 +139,9 @@ export async function applyPlannerProposal(ownerId: string, proposal: PlannerPro
   await ensureSchema();
   const db = getDatabaseBinding();
   const targetDates = [...new Set(proposal.tasks.map((task) => task.date))].sort();
+  if (!await ownsPracticeProblems(db, ownerId, proposal.tasks.flatMap(task => task.leetcodeProblemId ? [task.leetcodeProblemId] : []))) {
+    throw new PlannerApplyError('提案中的練習題目已不存在，請重新產生計畫。', 409);
+  }
   const startDate = targetDates[0] ?? proposal.cycle?.startDate ?? '';
   const endDate = targetDates.at(-1) ?? startDate;
 
@@ -266,11 +272,12 @@ export async function applyPlannerProposal(ownerId: string, proposal: PlannerPro
         : phaseIds[task.cycleLink.phaseIndex] || null;
       if (task.cycleLink.phaseIndex !== null && !resolvedPhaseId) throw invalidLink();
     } else if (task.cycleLink?.source === 'existing') {
-      const cycle = cycles.get(task.cycleLink.cycleId);
+      const link = task.cycleLink;
+      const cycle = cycles.get(link.cycleId);
       if (!cycle || task.date < cycle.startDate || task.date > cycle.endDate) throw invalidLink();
       resolvedCycleId = cycle.id;
-      if (task.cycleLink.phaseId) {
-        const phase = cycle.phases.find((item) => item.id === task.cycleLink?.phaseId);
+      if (link.phaseId) {
+        const phase = cycle.phases.find((item) => item.id === link.phaseId);
         if (!phase || task.date < phase.startDate || task.date > phase.endDate) throw invalidLink();
         resolvedPhaseId = phase.id;
       }
@@ -319,8 +326,8 @@ export async function applyPlannerProposal(ownerId: string, proposal: PlannerPro
         .prepare(`
           INSERT INTO tasks
             (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
-             recurrence_id, habit_cue, tiny_start, identity, position, created_at, updated_at)
-          VALUES (?, ?, ?, ?, 0, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+             recurrence_id, habit_cue, tiny_start, identity, position, created_at, updated_at, leetcode_problem_id)
+          VALUES (?, ?, ?, ?, 0, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
         `)
         .bind(
           crypto.randomUUID(),
@@ -336,6 +343,7 @@ export async function applyPlannerProposal(ownerId: string, proposal: PlannerPro
           position,
           now,
           now,
+          task.leetcodeProblemId ?? null,
         ),
     );
   }

@@ -12,6 +12,36 @@ type ChatItem = PlannerChatMessage & {
   applied?: boolean;
 };
 
+const learningCopy = {
+  en: {
+    label: 'Use my practice history',
+    detail: 'Include up to 60 LeetCode attempts (with short notes) and 100 practice sessions from the 30 days ending on the selected date. These are sent to Groq with this conversation. Changing this option starts a new conversation.',
+    start: 'Plan four weeks of interview prep',
+    startPrompt: 'I want to prepare for coding interviews over the next four weeks. Ask about my target, deadline, weekly available time, and starting level if needed, then propose phases and a realistic first week with review and buffer time.',
+    review: 'Adjust my next practice week',
+    reviewPrompt: 'Review my recent practice attempts and missed sessions, then propose the next seven days around my existing calendar. Explain which dated attempts justify each review. Ask for my deadline and available hours if missing. Keep completed work and existing tasks unchanged; reduce new work if review needs more time.',
+    linked: 'Linked practice · completion records a new attempt',
+  },
+  zh: {
+    label: '使用我的練習紀錄',
+    detail: '包含截至所選日期前 30 天、最多 60 次 LeetCode 作答（含簡短筆記）與 100 個練習任務，會和對話一起傳送給 Groq。切換此選項會開始新對話。',
+    start: '安排四週面試準備',
+    startPrompt: '我想在未來四週準備程式面試。請先確認我的目標、期限、每週可用時間與目前程度，再提出階段和合理的第一週安排，包含複習與緩衝時間。',
+    review: '依作答調整下週練習',
+    reviewPrompt: '請讀取最近的作答結果與未完成練習，搭配既有行事曆安排未來七天，說明每項複習是根據哪一題、哪一天的紀錄。如果缺少期限或可用時數，請先詢問。保留已完成與既有任務，複習較多時減少新題。',
+    linked: '已連結題目 · 完成時可記錄本次作答',
+  },
+  ja: {
+    label: '練習履歴を使う',
+    detail: '選択日までの30日間から、最大60件のLeetCode解答（短いメモを含む）と100件の練習予定を会話とともにGroqへ送信します。変更すると新しい会話が始まります。',
+    start: '4週間の面接準備を計画',
+    startPrompt: '今後4週間でコーディング面接を準備したいです。目標、期限、週の空き時間、現在のレベルを確認し、復習と余白を含むフェーズと最初の1週間を提案してください。',
+    review: '解答履歴から来週を調整',
+    reviewPrompt: '最近の解答結果と未完了の練習を読み、既存の予定に合わせて次の7日間を提案してください。復習の根拠となる問題名と日付を説明してください。期限と時間が不明なら先に質問し、完了済みと既存のタスクを保持して、復習が多い場合は新しい問題を減らしてください。',
+    linked: '問題にリンク済み · 完了時に解答を記録',
+  },
+};
+
 export default function PlannerChat({
   selectedDate,
   onApplied,
@@ -20,6 +50,8 @@ export default function PlannerChat({
   onApplied: (firstDate: string | null) => void;
 }) {
   const { language, t } = useI18n();
+  const learning = learningCopy[language];
+  const [includePractice, setIncludePractice] = useState(false);
   const [messages, setMessages] = useState<ChatItem[]>([
     {
       id: 'welcome',
@@ -38,6 +70,8 @@ export default function PlannerChat({
     [],
   );
   const suggestions = [
+    { label: learning.start, prompt: learning.startPrompt },
+    ...(includePractice ? [{ label: learning.review, prompt: learning.reviewPrompt }] : []),
     { label: t('suggestionCycleLabel'), prompt: t('suggestionCyclePrompt') },
     { label: t('suggestionDailyLabel'), prompt: t('suggestionDailyPrompt') },
     { label: t('suggestionLoadLabel'), prompt: t('suggestionLoadPrompt') },
@@ -68,7 +102,7 @@ export default function PlannerChat({
       const response = await fetch('/api/assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, currentDate: selectedDate, timezone, language }),
+        body: JSON.stringify({ messages: history, currentDate: selectedDate, timezone, language, includePractice }),
       });
       const result = await response.json().catch(() => ({})) as PlannerReply & { error?: string };
       if (!response.ok) throw new Error(t('plannerTemporaryError'));
@@ -157,6 +191,18 @@ export default function PlannerChat({
         <div className="planner-privacy"><span aria-hidden="true">◇</span><p><strong>{t('plannerNoSave')}</strong><small>{t('plannerNoSaveHint')}</small></p></div>
       </div>
 
+      <div className="card practice-context-control">
+        <label>
+          <input type="checkbox" checked={includePractice} disabled={status !== 'ready'} onChange={event => {
+            setIncludePractice(event.target.checked);
+            setMessages([{ id: 'welcome', role: 'assistant', localOnly: true, content: '' }]);
+            setError('');
+          }} />
+          <strong>{learning.label}</strong>
+        </label>
+        <p>{learning.detail}</p>
+      </div>
+
       <div className="planner-layout">
         <aside className="planner-suggestions" aria-label={t('plannerSuggestionsTitle')}>
           <p>{t('plannerSuggestionsTitle')}</p>
@@ -238,7 +284,7 @@ function ProposalCard({
   applying: boolean;
   onApply: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const groupedTasks = proposal.tasks.reduce<Record<string, typeof proposal.tasks>>((groups, task) => {
     (groups[task.date] ??= []).push(task);
     return groups;
@@ -264,7 +310,7 @@ function ProposalCard({
           {Object.entries(groupedTasks).map(([date, tasks]) => (
             <section key={date}>
               <time>{date}</time>
-              <ul>{tasks.map((task) => <li key={`${date}-${task.text}`}><span />{task.text}</li>)}</ul>
+              <ul>{tasks.map((task) => <li key={`${date}-${task.text}`}><span /><div>{task.text}{task.leetcodeProblemId && <small className="practice-linked">{learningCopy[language].linked}</small>}</div></li>)}</ul>
             </section>
           ))}
         </div>

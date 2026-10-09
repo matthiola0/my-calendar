@@ -7,7 +7,7 @@ import { useI18n } from '../lib/i18n';
 type Mode = 'login' | 'register';
 
 export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -72,6 +72,7 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
           <p className="auth-description">
             {t('authDescription')}
           </p>
+          <a href="https://matthiola.dev/daybook/">{language === 'zh' ? '看看如何用 Daybook 準備面試 ↗' : language === 'ja' ? 'Daybookで面接を準備する ↗' : 'See how Daybook supports interview prep ↗'}</a>
         </div>
         <p className="auth-footnote">{t('authFootnote')}</p>
       </section>

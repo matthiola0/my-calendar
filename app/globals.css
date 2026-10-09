@@ -621,3 +621,9 @@ footer p { margin: 0; font-family: var(--font-noto-serif-tc), serif; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+.practice-context-control { padding: 18px 22px; margin-bottom: 24px; }
+.practice-context-control label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.practice-context-control input { width: 18px; height: 18px; flex: 0 0 18px; accent-color: #526a53; }
+.practice-context-control p { font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
+.practice-linked { display: block; color: #526a53; font-size: 11px; margin-top: 4px; }
