@@ -72,7 +72,7 @@ export default function AuthScreen({ googleEnabled }: { googleEnabled: boolean }
           <p className="auth-description">
             {t('authDescription')}
           </p>
-          <a href="https://matthiola.dev/daybook/">{language === 'zh' ? '看看如何用 Daybook 準備面試 ↗' : language === 'ja' ? 'Daybookで面接を準備する ↗' : 'See how Daybook supports interview prep ↗'}</a>
+          <a href="https://matthiola.dev/daybook/">{language === 'zh' ? '看看 Daybook 如何規劃目標 ↗' : language === 'ja' ? 'Daybookの目標計画を見る ↗' : 'See how Daybook plans your goals ↗'}</a>
         </div>
         <p className="auth-footnote">{t('authFootnote')}</p>
       </section>
