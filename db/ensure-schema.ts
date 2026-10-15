@@ -18,6 +18,24 @@ export function ensureSchema() {
 async function initializeSchema(db: D1Database) {
   await db.batch([
         db.prepare(`
+          CREATE TABLE IF NOT EXISTS agent_tokens (
+            id TEXT PRIMARY KEY NOT NULL,
+            owner_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL,
+            name TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+          )
+        `),
+        db.prepare(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_tokens_hash
+          ON agent_tokens (token_hash)
+        `),
+        db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_agent_tokens_owner_expires
+          ON agent_tokens (owner_id, expires_at)
+        `),
+        db.prepare(`
           CREATE TABLE IF NOT EXISTS password_users (
             id TEXT PRIMARY KEY NOT NULL,
             username TEXT NOT NULL,

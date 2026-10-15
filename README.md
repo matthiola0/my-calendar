@@ -6,7 +6,7 @@
 
 An AI-assisted calendar for planning macro cycles, building daily habits, and learning from reflection.
 
-[Live app](https://calendar.matthiola.dev/) · [AI planner guide](docs/ai-planner.md) · [Report a vulnerability](SECURITY.md)
+[Live app](https://calendar.matthiola.dev/) · [AI planner guide](docs/ai-planner.md) · [Hermes Agent setup](docs/hermes-agent.md) · [Report a vulnerability](SECURITY.md)
 
 [English](README.md) | [繁體中文](docs/README.zh-TW.md) | [日本語](docs/README.ja.md)
 
@@ -101,7 +101,9 @@ The application uses React and Next.js-compatible routing through vinext, Drizzl
 
 ## Local agent access
 
-The project CLI operates as the authenticated owner configured in the local environment. It can read dates before planning, preserve existing items, add linked tasks, and verify the result afterward.
+The project CLI uses the account-specific token configured in the local environment. Sign in to Daybook and open Agent access to create or revoke a token. The CLI can read dates before planning, preserve existing items, add linked tasks, and verify the result afterward. The legacy server token remains limited to the default owner.
+
+For Hermes, run `npm run hermes:install` on its machine to install portable skills and the CLI. Configure credentials securely in Hermes, then use `/daybook-today`, `/daybook-plan`, `/daybook-review`, or `/daybook-status day|week|month`. See the [Hermes Agent guide](docs/hermes-agent.md) for setup, routine handling, and planning limits.
 
 ```bash
 npm run calendar -- get 2026-09-01

@@ -35,6 +35,22 @@ export const googleUsers = sqliteTable('google_users', {
   updatedAt: integer('updated_at').notNull(),
 });
 
+export const agentTokens = sqliteTable(
+  'agent_tokens',
+  {
+    id: text('id').primaryKey(),
+    ownerId: text('owner_id').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    name: text('name').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_agent_tokens_hash').on(table.tokenHash),
+    index('idx_agent_tokens_owner_expires').on(table.ownerId, table.expiresAt),
+  ],
+);
+
 export const googleAuthSessions = sqliteTable(
   'google_auth_sessions',
   {

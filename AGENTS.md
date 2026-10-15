@@ -2,6 +2,22 @@
 
 When the user asks to read or change calendar data, use the project CLI rather than editing source files or accessing the database directly.
 
+For agent workflows (dates default to `CALENDAR_TIMEZONE`, or `Asia/Taipei`):
+
+```bash
+npm run calendar -- today [YYYY-MM-DD]
+npm run calendar -- agenda [START_DATE] [END_DATE]
+npm run calendar -- plan [START_DATE] [END_DATE]
+npm run calendar -- summary day|week|month [YYYY-MM-DD]
+npm run calendar -- review [YYYY-MM-DD] ["reflection to append"]
+npm run calendar -- record YYYY-MM-DD "task"
+npm run calendar -- done YYYY-MM-DD TASK_ID [true|false]
+```
+
+`today`, `agenda`, `plan`, `summary`, and `review` without text are read-only. `plan` returns workload context for the agent to plan with; it does not write a plan. `record` avoids identical normalized task text on the same date; `done` sets an explicit state instead of toggling it. `review` with text appends to existing reflection. Agenda/plan ranges are at most 31 days. Weeks begin Monday; full-period counts include future dates, so distinguish elapsed completion from future scheduled tasks.
+
+Hermes setup and quick commands are documented in [docs/hermes-agent.md](docs/hermes-agent.md). Install portable skills with `npm run hermes:install`; use a personal token created in the signed-in account's Agent access panel. The legacy server token only accesses the default owner. Never request credentials in chat.
+
 ```bash
 npm run calendar -- get YYYY-MM-DD
 npm run calendar -- add YYYY-MM-DD "task"

@@ -6,7 +6,7 @@
 
 一個結合 AI 規劃、大週期、每日習慣與反思的個人行事曆。
 
-[開始使用](https://calendar.matthiola.dev/) · [AI 規劃說明](ai-planner.md) · [安全問題回報](../SECURITY.md)
+[開始使用](https://calendar.matthiola.dev/) · [AI 規劃說明](ai-planner.md) · [Hermes Agent 設定](hermes-agent.md) · [安全問題回報](../SECURITY.md)
 
 [English](../README.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
@@ -94,6 +94,8 @@ scripts         本機行事曆 agent CLI
 ```
 
 完整 agent 指令見 [AGENTS.md](../AGENTS.md)。行事曆內容屬於私密資料，請勿放進公開 log、issue、截圖或 commit。
+
+登入後可在頁首建立帳號專屬的 Agent 授權，90 天到期且可隨時撤銷。在 Hermes 所在機器執行 `npm run hermes:install`，設定私密連線資訊後，就能使用 `/daybook-today`、`/daybook-plan`、`/daybook-review` 與 `/daybook-status day|week|month`。例行公事、行程記錄與完整設定見 [Hermes Agent 說明](hermes-agent.md)。
 
 ## 參與貢獻
 

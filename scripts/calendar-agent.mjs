@@ -1,16 +1,25 @@
 import { randomUUID } from 'node:crypto';
+import { CalendarAgentError, runWorkflow, validateCommand, workflowCommands } from './calendar-agent-workflows.mjs';
 
-const apiUrl = process.env.CALENDAR_API_URL?.replace(/\/$/, '');
-const agentToken = process.env.CALENDAR_AGENT_TOKEN;
-const sitesBypassToken = process.env.CALENDAR_SITES_BYPASS_TOKEN;
+let apiUrl;
+let agentToken;
+let sitesBypassToken;
 
-if (!apiUrl || !agentToken || !sitesBypassToken) {
-  fail('Missing CALENDAR_API_URL, CALENDAR_AGENT_TOKEN, or CALENDAR_SITES_BYPASS_TOKEN in .env.local.');
+await main().catch((error) => fail(error instanceof CalendarAgentError ? error.message : 'Calendar operation failed.'));
+
+async function main() {
+  const [command, ...args] = process.argv.slice(2);
+  if (!command || ['help', '--help', '-h'].includes(command)) return printHelp();
+  const timezone = process.env.CALENDAR_TIMEZONE || 'Asia/Taipei';
+  validateCommand(command, args, timezone);
+  configure();
+  if (workflowCommands.has(command)) {
+    return runWorkflow(command, args, { timezone, getEntry, saveEntry, getCycles, getSections });
+  }
+  return runLegacyCommand(command, args);
 }
 
-const [command, ...args] = process.argv.slice(2);
-if (!command) printHelp();
-
+async function runLegacyCommand(command, args) {
 switch (command) {
   case 'get': {
     const [date] = args;
@@ -418,16 +427,37 @@ switch (command) {
   default:
     printHelp();
 }
+}
+
+function configure() {
+  agentToken = process.env.CALENDAR_AGENT_TOKEN?.trim();
+  sitesBypassToken = process.env.CALENDAR_SITES_BYPASS_TOKEN?.trim();
+  if (!process.env.CALENDAR_API_URL || !agentToken) {
+    throw new CalendarAgentError('Set CALENDAR_API_URL and CALENDAR_AGENT_TOKEN in the environment. CALENDAR_SITES_BYPASS_TOKEN is optional.');
+  }
+  if (/[\r\n]/.test(agentToken) || /[\r\n]/.test(sitesBypassToken ?? '')) {
+    throw new CalendarAgentError('Calendar tokens must be single-line values.');
+  }
+  let url;
+  try { url = new URL(process.env.CALENDAR_API_URL); }
+  catch { throw new CalendarAgentError('CALENDAR_API_URL must be a valid HTTPS URL.'); }
+  if (url.username || url.password || url.search || url.hash ||
+      (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))) {
+    throw new CalendarAgentError('CALENDAR_API_URL requires HTTPS (HTTP is allowed only for localhost) and cannot contain credentials, query parameters, or fragments.');
+  }
+  apiUrl = url.toString().replace(/\/+$/, '');
+}
 
 async function getEntry(targetDate) {
   return request(`/api/entries?date=${encodeURIComponent(targetDate)}`);
 }
 
 async function saveEntry(targetDate, entryValue) {
-  await request('/api/entries', {
+  const result = await request('/api/entries', {
     method: 'PUT',
     body: JSON.stringify({ date: targetDate, ...entryValue }),
   });
+  entryValue.revision = result.revision;
 }
 
 async function getCycles() {
@@ -449,24 +479,48 @@ async function saveCycle(cycle) {
 }
 
 async function request(path, init = {}) {
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${agentToken}`,
-      'OAI-Sites-Authorization': `Bearer ${sitesBypassToken}`,
-      'Content-Type': 'application/json',
-      ...init.headers,
-    },
-  });
-  if (!response.ok) {
-    const message = await response.text();
-    fail(`Calendar API returned ${response.status}: ${message}`);
+  let response;
+  try {
+    response = await fetch(`${apiUrl}${path}`, {
+      ...init,
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000),
+      headers: {
+        Authorization: `Bearer ${agentToken}`,
+        ...(sitesBypassToken ? { 'OAI-Sites-Authorization': `Bearer ${sitesBypassToken}` } : {}),
+        'Content-Type': 'application/json',
+        ...init.headers,
+      },
+    });
+  } catch {
+    throw new CalendarAgentError('Unable to reach the Calendar API. Check its URL and network connection.');
   }
-  return response.json();
+  if (!response.ok) {
+    const hint = response.status === 409 ? ' Read the latest data before retrying; no automatic overwrite was attempted.'
+      : [401, 403].includes(response.status) ? ' Check the account token and optional Sites bypass token.' : '';
+    throw new CalendarAgentError(`Calendar API returned HTTP ${response.status}.${hint}`);
+  }
+  try { return await response.json(); }
+  catch { throw new CalendarAgentError('Calendar API returned an invalid JSON response.'); }
 }
 
 function printHelp() {
-  console.log(`Calendar agent commands:
+  console.log(`Hermes quick commands (JSON output):
+  today      [YYYY-MM-DD]
+  agenda     [START_DATE] [END_DATE]
+  plan       [START_DATE] [END_DATE]  (read-only planning context)
+  record     YYYY-MM-DD "task"       (skip an exact normalized duplicate)
+  done       YYYY-MM-DD TASK_ID [true|false]
+  review     [YYYY-MM-DD] ["reflection"]  (append when text is supplied)
+  summary    day|week|month [YYYY-MM-DD]
+
+Dates default to today in CALENDAR_TIMEZONE (Asia/Taipei).
+Agenda and plan default to 7 days; ranges are limited to 31 days.
+Weeks run Monday–Sunday. Completion rates are 0–1, or null for no tasks.
+Routine tasks have recurrenceId and no deadline. Include appointment times in task text.
+Set CALENDAR_API_URL and CALENDAR_AGENT_TOKEN; CALENDAR_SITES_BYPASS_TOKEN is optional.
+
+Calendar agent commands:
   get        YYYY-MM-DD
   add        YYYY-MM-DD "task"
   short      YYYY-MM-DD "task" END_DATE
@@ -505,7 +559,6 @@ LeetCode database:
   leetcode-add YYYY-MM-DD easy|medium|hard "title" [URL]
   leetcode-schedule PROBLEM_ID YYYY-MM-DD
   leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]`);
-  process.exit(1);
 }
 
 function fail(message) {

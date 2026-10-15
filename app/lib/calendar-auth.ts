@@ -1,20 +1,21 @@
 import { env } from 'cloudflare:workers';
 import { getCurrentUser } from './auth';
+import { getAgentTokenOwnerId } from './agent-access';
 
 const OWNER_ID = 'owner';
 
 export async function getAuthorizedOwnerId(request: Request) {
   const authorization = request.headers.get('authorization');
-  const suppliedToken = authorization?.startsWith('Bearer ')
-    ? authorization.slice(7)
-    : '';
-
-  if (
-    suppliedToken &&
-    env.AGENT_API_TOKEN &&
-    constantTimeEqual(suppliedToken, env.AGENT_API_TOKEN)
-  ) {
-    return OWNER_ID;
+  if (authorization !== null) {
+    const suppliedToken = /^Bearer (\S+)$/i.exec(authorization)?.[1];
+    if (!suppliedToken) return null;
+    if (
+      env.AGENT_API_TOKEN &&
+      constantTimeEqual(suppliedToken, env.AGENT_API_TOKEN)
+    ) {
+      return OWNER_ID;
+    }
+    return getAgentTokenOwnerId(suppliedToken);
   }
 
   return (await getCurrentUser(request))?.ownerId ?? null;

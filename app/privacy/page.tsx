@@ -46,6 +46,11 @@ export default function PrivacyPage() {
         </section>
 
         <section>
+          <h2>{t('privacyAgentTitle')}</h2>
+          <p>{t('privacyAgentText')}</p>
+        </section>
+
+        <section>
           <h2>{t('privacyChoicesTitle')}</h2>
           <p>{t('privacyChoicesText')}</p>
         </section>
