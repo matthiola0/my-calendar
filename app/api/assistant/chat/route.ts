@@ -1,12 +1,11 @@
 import { getAuthorizedOwnerId } from '../../../lib/calendar-auth';
+import { isValidDate } from '../../../lib/calendar-dates';
 import { choosePlanningRange, createPlannerReply, PlannerAiError } from '../../../lib/planner-ai';
 import { loadPlanningContext } from '../../../lib/planner-calendar';
 import type { PlannerChatMessage } from '../../../lib/planner-types';
 import { consumeRateLimit, rateLimited } from '../../../lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(request: Request) {
   const ownerId = await getAuthorizedOwnerId(request);
@@ -89,11 +88,4 @@ function parseRequest(body: unknown): {
     language: candidate.language,
     includePractice: candidate.includePractice === true,
   };
-}
-
-function isValidDate(value: string) {
-  if (!DATE_PATTERN.test(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
 }

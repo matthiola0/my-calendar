@@ -1,5 +1,6 @@
 import { ensureSchema } from '../../db/ensure-schema';
 import { getDatabaseBinding } from '../../db';
+import { shiftDate } from './calendar-dates';
 import type { PlanningContext } from './planner-ai';
 import type { PlannerProposal, ProposedTask } from './planner-types';
 import { loadPracticeContext, ownsPracticeProblems } from './planner-practice';
@@ -360,12 +361,6 @@ export async function applyPlannerProposal(ownerId: string, proposal: PlannerPro
 
 function taskKey(date: string, text: string) {
   return `${date}:${text.trim().toLocaleLowerCase('zh-TW')}`;
-}
-
-function shiftDate(date: string, amount: number) {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  parsed.setUTCDate(parsed.getUTCDate() + amount);
-  return parsed.toISOString().slice(0, 10);
 }
 
 function invalidLink() {

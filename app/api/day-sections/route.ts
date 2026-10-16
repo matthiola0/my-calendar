@@ -1,13 +1,9 @@
 import { ensureSchema } from '../../../db/ensure-schema';
 import { getDatabaseBinding } from '../../../db';
 import { getAuthorizedOwnerId } from '../../lib/calendar-auth';
+import type { DaySection } from '../../lib/calendar-types';
 
 export const dynamic = 'force-dynamic';
-
-type DaySection = {
-  id: string;
-  title: string;
-};
 
 export async function GET(request: Request) {
   const ownerId = await getAuthorizedOwnerId(request);

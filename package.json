@@ -10,6 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "test:calendar": "node --test scripts/test-calendar-dates.mjs scripts/test-calendar-entries.mjs scripts/test-planner-practice.mjs",
     "db:generate": "drizzle-kit generate",
     "calendar": "node --env-file-if-exists=.env.local scripts/calendar-agent.mjs",
     "hermes:install": "node scripts/install-hermes.mjs",

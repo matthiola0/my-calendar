@@ -6,29 +6,10 @@ import LeetCode, { AttemptDialog } from './leetcode';
 import PlannerChat from './planner-chat';
 import AgentAccess from './agent-access';
 import { Language, useI18n } from '../lib/i18n';
-
-type Task = {
-  id: string;
-  text: string;
-  done: boolean;
-  cycleId: string | null;
-  phaseId: string | null;
-  sectionId: string | null;
-  recurrenceId: string | null;
-  deadline: string | null;
-  habitCue: string | null;
-  tinyStart: string | null;
-  identity: string | null;
-  leetcodeProblemId: string | null;
-  streak: number;
-  recoveryDue: boolean;
-};
+import type { DayEntry, DaySection, Task, TaskDraft } from '../lib/calendar-types';
 
 type CycleOption = { id: string; title: string; phases: Array<{ id: string; title: string }> };
-type DaySection = { id: string; title: string };
 type CustomField = { id: string; title: string; content: string };
-type TaskDraft = Pick<Task, 'id' | 'text' | 'cycleId' | 'phaseId' | 'sectionId' | 'recurrenceId' | 'deadline' | 'habitCue' | 'tinyStart' | 'identity' | 'leetcodeProblemId'>;
-type DayEntry = { tasks: Task[]; activity: string; reflection: string; revision: string | null };
 type SyncStatus = 'loading' | 'saving' | 'saved' | 'conflict' | 'error';
 type RepeatMode = '' | 'short' | 'day' | 'week' | 'month';
 

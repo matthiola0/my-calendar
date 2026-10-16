@@ -1,0 +1,327 @@
+import { isValidDate } from './calendar-dates';
+import type { DayEntry, Task } from './calendar-types';
+
+type TaskRow = Omit<Task, 'done' | 'streak' | 'recoveryDue'> & {
+  date: string;
+  done: number;
+};
+
+type SeriesRow = {
+  recurrenceId: string;
+  date: string;
+  done: number;
+};
+
+export async function readDayEntry(db: D1Database, ownerId: string, date: string): Promise<DayEntry> {
+  const day = await db
+    .prepare(
+      'SELECT activity, reflection, revision FROM day_entries WHERE owner_id = ? AND date = ?',
+    )
+    .bind(ownerId, date)
+    .first<{ activity: string; reflection: string; revision: string }>();
+  const taskRows = await db
+    .prepare(
+      `SELECT id, date, text, done, cycle_id AS cycleId, phase_id AS phaseId,
+        section_id AS sectionId, recurrence_id AS recurrenceId,
+        deadline, habit_cue AS habitCue, tiny_start AS tinyStart, identity,
+        leetcode_problem_id AS leetcodeProblemId
+       FROM tasks WHERE owner_id = ? AND date = ? ORDER BY position ASC`,
+    )
+    .bind(ownerId, date)
+    .all<TaskRow>();
+  const seriesStats = await loadSeriesStats(db, ownerId, taskRows.results);
+
+  return {
+    tasks: taskRows.results.map((task) => ({
+      id: task.id,
+      text: task.text,
+      done: Boolean(task.done),
+      cycleId: task.cycleId,
+      phaseId: task.phaseId,
+      sectionId: task.sectionId,
+      recurrenceId: task.recurrenceId,
+      deadline: task.deadline,
+      habitCue: task.habitCue,
+      tinyStart: task.tinyStart,
+      identity: task.identity,
+      leetcodeProblemId: task.leetcodeProblemId,
+      streak: task.recurrenceId && !task.deadline ? seriesStats.get(`${task.recurrenceId}:${date}`)?.streak ?? 0 : 0,
+      recoveryDue: task.recurrenceId && !task.deadline ? seriesStats.get(`${task.recurrenceId}:${date}`)?.recoveryDue ?? false : false,
+    })),
+    activity: day?.activity ?? '',
+    reflection: day?.reflection ?? '',
+    revision: day?.revision ?? null,
+  };
+}
+
+type SaveDayEntryResult =
+  | { ok: true; revision: string; updatedAt: number }
+  | { ok: false; reason: 'invalid-references' | 'conflict' };
+
+export async function saveDayEntry(
+  db: D1Database,
+  ownerId: string,
+  date: string,
+  entry: DayEntry,
+): Promise<SaveDayEntryResult> {
+  if (!(await taskReferencesAreValid(db, ownerId, entry.tasks))) {
+    return { ok: false, reason: 'invalid-references' };
+  }
+  const now = Date.now();
+  const nextRevision = crypto.randomUUID();
+  const dayMutation = entry.revision === null
+    ? db
+      .prepare(`
+        INSERT INTO day_entries (owner_id, date, activity, reflection, revision, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(owner_id, date) DO NOTHING
+      `)
+      .bind(ownerId, date, entry.activity, entry.reflection, nextRevision, now)
+    : db
+      .prepare(`
+        UPDATE day_entries SET
+          activity = ?,
+          reflection = ?,
+          revision = ?,
+          updated_at = ?
+        WHERE owner_id = ? AND date = ? AND revision = ?
+      `)
+      .bind(
+        entry.activity,
+        entry.reflection,
+        nextRevision,
+        now,
+        ownerId,
+        date,
+        entry.revision,
+      );
+  const statements = [
+    dayMutation,
+    db
+      .prepare(`
+        DELETE FROM tasks
+        WHERE owner_id = ? AND date = ?
+          AND EXISTS (
+            SELECT 1 FROM day_entries
+            WHERE owner_id = ? AND date = ? AND revision = ?
+          )
+      `)
+      .bind(ownerId, date, ownerId, date, nextRevision),
+    ...entry.tasks.map((task, position) =>
+      db
+        .prepare(`
+          INSERT INTO tasks
+            (id, owner_id, date, text, done, cycle_id, phase_id, section_id,
+             recurrence_id, deadline, habit_cue, tiny_start, identity, leetcode_problem_id,
+             position, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM day_entries
+            WHERE owner_id = ? AND date = ? AND revision = ?
+          )
+        `)
+        .bind(
+          task.id,
+          ownerId,
+          date,
+          task.text,
+          task.done ? 1 : 0,
+          task.cycleId,
+          task.phaseId,
+          task.sectionId,
+          task.recurrenceId,
+          task.deadline,
+          task.habitCue,
+          task.tinyStart,
+          task.identity,
+          task.leetcodeProblemId,
+          position,
+          now,
+          now,
+          ownerId,
+          date,
+          nextRevision,
+        ),
+    ),
+  ];
+
+  const results = await db.batch(statements);
+  if (!results[0].meta.changes) return { ok: false, reason: 'conflict' };
+  return { ok: true, revision: nextRevision, updatedAt: now };
+}
+
+export function parseEntry(body: unknown):
+  | { ok: true; date: string; entry: DayEntry }
+  | { ok: false; error: string } {
+  if (!body || typeof body !== 'object') {
+    return { ok: false, error: '缺少行事曆內容。' };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  if (typeof candidate.date !== 'string' || !isValidDate(candidate.date)) {
+    return { ok: false, error: '日期格式不正確。' };
+  }
+  if (
+    typeof candidate.activity !== 'string' ||
+    typeof candidate.reflection !== 'string' ||
+    (candidate.revision !== null && typeof candidate.revision !== 'string') ||
+    (typeof candidate.revision === 'string' && candidate.revision.length > 100) ||
+    candidate.activity.length > 20_000 ||
+    candidate.reflection.length > 20_000
+  ) {
+    return { ok: false, error: '紀錄內容格式不正確或過長。' };
+  }
+  if (!Array.isArray(candidate.tasks) || candidate.tasks.length > 100) {
+    return { ok: false, error: '待辦清單格式不正確或項目過多。' };
+  }
+
+  const tasks: Task[] = [];
+  const seenIds = new Set<string>();
+  for (const rawTask of candidate.tasks) {
+    if (!rawTask || typeof rawTask !== 'object') {
+      return { ok: false, error: '待辦項目格式不正確。' };
+    }
+    const task = rawTask as Record<string, unknown>;
+    const cycleId = task.cycleId === undefined ? null : task.cycleId;
+    const phaseId = task.phaseId === undefined ? null : task.phaseId;
+    const sectionId = task.sectionId === undefined ? null : task.sectionId;
+    const recurrenceId = task.recurrenceId === undefined ? null : task.recurrenceId;
+    const deadline = task.deadline === undefined ? null : task.deadline;
+    const habitCue = task.habitCue === undefined ? null : task.habitCue;
+    const tinyStart = task.tinyStart === undefined ? null : task.tinyStart;
+    const identity = task.identity === undefined ? null : task.identity;
+    const leetcodeProblemId = task.leetcodeProblemId === undefined ? null : task.leetcodeProblemId;
+    if (
+      typeof task.id !== 'string' ||
+      task.id.length < 1 ||
+      task.id.length > 100 ||
+      seenIds.has(task.id) ||
+      typeof task.text !== 'string' ||
+      task.text.trim().length < 1 ||
+      task.text.length > 500 ||
+      typeof task.done !== 'boolean' ||
+      (cycleId !== null && (typeof cycleId !== 'string' || cycleId.length < 1 || cycleId.length > 100)) ||
+      (phaseId !== null && (typeof phaseId !== 'string' || phaseId.length < 1 || phaseId.length > 100)) ||
+      (phaseId !== null && cycleId === null) ||
+      (sectionId !== null && (typeof sectionId !== 'string' || sectionId.length < 1 || sectionId.length > 100)) ||
+      (recurrenceId !== null && (typeof recurrenceId !== 'string' || recurrenceId.length < 1 || recurrenceId.length > 100)) ||
+      (deadline !== null && (typeof deadline !== 'string' || !isValidDate(deadline) || deadline < candidate.date || recurrenceId === null)) ||
+      (habitCue !== null && (typeof habitCue !== 'string' || habitCue.length > 300)) ||
+      (tinyStart !== null && (typeof tinyStart !== 'string' || tinyStart.length > 300)) ||
+      (identity !== null && (typeof identity !== 'string' || identity.length > 300))
+      || (leetcodeProblemId !== null && (typeof leetcodeProblemId !== 'string' || leetcodeProblemId.length < 1 || leetcodeProblemId.length > 100))
+    ) {
+      return { ok: false, error: '待辦項目內容不正確。' };
+    }
+    seenIds.add(task.id);
+    tasks.push({
+      id: task.id,
+      text: task.text.trim(),
+      done: task.done,
+      cycleId,
+      phaseId,
+      sectionId,
+      recurrenceId,
+      deadline,
+      habitCue: typeof habitCue === 'string' && habitCue.trim() ? habitCue.trim() : null,
+      tinyStart: typeof tinyStart === 'string' && tinyStart.trim() ? tinyStart.trim() : null,
+      identity: typeof identity === 'string' && identity.trim() ? identity.trim() : null,
+      leetcodeProblemId,
+      streak: 0,
+      recoveryDue: false,
+    });
+  }
+
+  return {
+    ok: true,
+    date: candidate.date,
+    entry: {
+      tasks,
+      activity: candidate.activity,
+      reflection: candidate.reflection,
+      revision: candidate.revision,
+    },
+  };
+}
+
+async function loadSeriesStats(db: D1Database, ownerId: string, tasks: TaskRow[]) {
+  const recurrenceIds = [...new Set(tasks.flatMap((task) => task.recurrenceId && !task.deadline ? [task.recurrenceId] : []))];
+  const stats = new Map<string, { streak: number; recoveryDue: boolean }>();
+  if (recurrenceIds.length === 0) return stats;
+
+  const placeholders = recurrenceIds.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(`
+      SELECT recurrence_id AS recurrenceId, date, done
+      FROM tasks
+      WHERE owner_id = ? AND recurrence_id IN (${placeholders})
+      ORDER BY recurrence_id, date, position
+    `)
+    .bind(ownerId, ...recurrenceIds)
+    .all<SeriesRow>();
+  const grouped = new Map<string, SeriesRow[]>();
+  for (const row of rows.results) {
+    const series = grouped.get(row.recurrenceId) ?? [];
+    series.push(row);
+    grouped.set(row.recurrenceId, series);
+  }
+
+  for (const task of tasks) {
+    if (!task.recurrenceId) continue;
+    const series = grouped.get(task.recurrenceId) ?? [];
+    const index = series.findIndex((row) => row.date === task.date);
+    if (index < 0) continue;
+    let streak = 0;
+    let cursor = series[index].done ? index : index - 1;
+    while (cursor >= 0 && series[cursor].done) {
+      streak += 1;
+      cursor -= 1;
+    }
+    stats.set(`${task.recurrenceId}:${task.date}`, {
+      streak,
+      recoveryDue: !series[index].done && index > 0 && !series[index - 1].done,
+    });
+  }
+  return stats;
+}
+
+async function taskReferencesAreValid(db: D1Database, ownerId: string, tasks: Task[]) {
+  const [cycleRows, phaseRows, sectionRows, problemRows] = await Promise.all([
+    db.prepare('SELECT id FROM cycles WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
+    db
+      .prepare('SELECT id, cycle_id AS cycleId FROM cycle_phases WHERE owner_id = ?')
+      .bind(ownerId)
+      .all<{ id: string; cycleId: string }>(),
+    db.prepare('SELECT id FROM day_sections WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
+    db.prepare('SELECT id FROM leetcode_problems WHERE owner_id = ?').bind(ownerId).all<{ id: string }>(),
+  ]);
+  const cycleIds = new Set(cycleRows.results.map((cycle) => cycle.id));
+  const phaseCycles = new Map(phaseRows.results.map((phase) => [phase.id, phase.cycleId]));
+  const sectionIds = new Set(sectionRows.results.map((section) => section.id));
+  const problemIds = new Set(problemRows.results.map((problem) => problem.id));
+
+  const referencesAreValid = tasks.every((task) =>
+    (task.cycleId === null || cycleIds.has(task.cycleId)) &&
+    (task.phaseId === null || phaseCycles.get(task.phaseId) === task.cycleId) &&
+    (task.sectionId === null || sectionIds.has(task.sectionId)) &&
+    (task.leetcodeProblemId === null || problemIds.has(task.leetcodeProblemId)),
+  );
+  if (!referencesAreValid) return false;
+
+  const recurringTasks = tasks.filter((task) => task.recurrenceId);
+  if (recurringTasks.length === 0) return true;
+  const recurrenceIds = [...new Set(recurringTasks.map((task) => task.recurrenceId as string))];
+  const placeholders = recurrenceIds.map(() => '?').join(', ');
+  const seriesRows = await db
+    .prepare(`
+      SELECT recurrence_id AS recurrenceId, deadline
+      FROM tasks
+      WHERE owner_id = ? AND recurrence_id IN (${placeholders})
+    `)
+    .bind(ownerId, ...recurrenceIds)
+    .all<{ recurrenceId: string; deadline: string | null }>();
+  return recurringTasks.every((task) => {
+    const series = seriesRows.results.filter((row) => row.recurrenceId === task.recurrenceId);
+    return series.length > 0 && series.every((row) => row.deadline === task.deadline);
+  });
+}

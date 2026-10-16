@@ -1,10 +1,10 @@
 import { ensureSchema } from '../../../db/ensure-schema';
 import { getDatabaseBinding } from '../../../db';
 import { getAuthorizedOwnerId } from '../../lib/calendar-auth';
+import { isValidDate } from '../../lib/calendar-dates';
 
 export const dynamic = 'force-dynamic';
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 const ATTEMPT_STATUSES = new Set(['stuck', 'hinted', 'solved', 'reviewed']);
 
@@ -398,13 +398,6 @@ function optionalId(value: unknown): string | null | undefined {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string' || !value || value.length > 100) return undefined;
   return value;
-}
-
-function isValidDate(value: string) {
-  if (!DATE_PATTERN.test(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
 }
 
 async function readJson(request: Request): Promise<

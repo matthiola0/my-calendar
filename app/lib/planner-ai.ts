@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { isValidDate, shiftDate } from './calendar-dates';
 import type { PracticeContext } from './planner-practice';
 import type {
   PlannerChatMessage,
@@ -11,7 +12,6 @@ import type {
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_MODEL = 'qwen/qwen3.8-27b';
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 export const MAX_PROPOSAL_TASKS = 30;
 const MAX_CONTEXT_DAYS = 120;
 
@@ -381,21 +381,8 @@ function validDate(value: unknown) {
   return value;
 }
 
-function isValidDate(value: string) {
-  if (!DATE_PATTERN.test(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
-}
-
 function daysBetween(startDate: string, endDate: string) {
   return Math.floor((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000);
-}
-
-function shiftDate(date: string, amount: number) {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  parsed.setUTCDate(parsed.getUTCDate() + amount);
-  return parsed.toISOString().slice(0, 10);
 }
 
 function invalidReply() {
