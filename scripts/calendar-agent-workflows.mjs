@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 export class CalendarAgentError extends Error {}
 
-export const workflowCommands = new Set(['today', 'agenda', 'summary', 'plan', 'review', 'record', 'done']);
+export const workflowCommands = new Set(['today', 'agenda', 'summary', 'plan', 'review', 'record', 'done', 'rename', 'detach', 'reschedule']);
 
 export function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -76,6 +77,23 @@ export function newTask(text) {
   return { id: randomUUID(), text, done: false, cycleId: null, phaseId: null, sectionId: null, recurrenceId: null, deadline: null, habitCue: null, tinyStart: null, identity: null, leetcodeProblemId: null };
 }
 
+function taskContent(task) {
+  const value = { ...task };
+  // These are computed on reads and can change when an occurrence is detached or moved.
+  delete value.streak;
+  delete value.recoveryDue;
+  return value;
+}
+
+function sameTask(left, right) {
+  return Boolean(left && right) && isDeepStrictEqual(taskContent(left), taskContent(right));
+}
+
+function sameEntry(left, right) {
+  return left.activity === right.activity && left.reflection === right.reflection &&
+    isDeepStrictEqual(left.tasks.map(taskContent), right.tasks.map(taskContent));
+}
+
 // These commands return data for the agent to reason about. Planning reads context;
 // recording a proposed plan still uses the explicit write commands.
 export async function runWorkflow(command, args, api) {
@@ -114,6 +132,68 @@ export async function runWorkflow(command, args, api) {
   }
   const date = args[0] ?? today;
   const entry = await getEntry(date);
+  if (command === 'rename' || command === 'detach' || command === 'reschedule') {
+    const task = entry.tasks.find((item) => item.id === args[1]);
+    if (!task) throw new CalendarAgentError('Task not found. Read the day again and use its task ID.');
+    if (command === 'reschedule') {
+      if (task.deadline || task.leetcodeProblemId) {
+        throw new CalendarAgentError('Reschedule does not support deadline or LeetCode-linked tasks.');
+      }
+      const targetDate = args[2];
+      const targetEntry = await getEntry(targetDate);
+      if (targetEntry.tasks.length >= 100) throw new CalendarAgentError('The target date already has 100 tasks.');
+      if (task.recurrenceId && targetEntry.tasks.some((item) => item.recurrenceId === task.recurrenceId)) {
+        throw new CalendarAgentError('The target date already has an occurrence of this recurring series. Detach the source task first if you intend to move a standalone occurrence.');
+      }
+      const copy = { ...task, id: randomUUID(), text: args[3]?.trim() ?? task.text };
+      targetEntry.tasks.push(copy);
+      let targetSaved = false;
+      let sourceWriteAttempted = false;
+      try {
+        // Save and verify a separate copy before removing anything from the source date.
+        await saveEntry(targetDate, targetEntry);
+        targetSaved = true;
+        const verifiedTarget = await getEntry(targetDate);
+        if (!sameEntry(targetEntry, verifiedTarget)) throw new CalendarAgentError('The target date changed during verification.');
+        const sourceEntry = await getEntry(date);
+        const sourceIndex = sourceEntry.tasks.findIndex((item) => item.id === task.id);
+        if (!sameTask(sourceEntry.tasks[sourceIndex], task)) {
+          throw new CalendarAgentError('The source task changed after the target copy was saved.');
+        }
+        if (!sameEntry(targetEntry, await getEntry(targetDate))) {
+          throw new CalendarAgentError('The target date changed before source removal.');
+        }
+        sourceEntry.tasks.splice(sourceIndex, 1);
+        sourceWriteAttempted = true;
+        await saveEntry(date, sourceEntry);
+        const finalSource = await getEntry(date);
+        const finalTarget = await getEntry(targetDate);
+        if (!sameEntry(sourceEntry, finalSource) || !sameEntry(targetEntry, finalTarget)) {
+          throw new CalendarAgentError('The rescheduled dates changed during final verification.');
+        }
+        output({ sourceDate: date, targetDate, moved: true, sourceTaskId: task.id, task: finalTarget.tasks.find((item) => item.id === copy.id) });
+      } catch (error) {
+        const detail = error instanceof CalendarAgentError ? error.message : 'Reschedule could not be completed.';
+        const targetState = targetSaved ? 'was saved' : 'may have been saved';
+        const sourceState = sourceWriteAttempted ? 'Source removal is unverified.' : 'This command did not delete the source task.';
+        throw new CalendarAgentError(`${detail} A target copy ${targetState} on ${targetDate} with task ID ${copy.id}. ${sourceState} Do not retry reschedule blindly; read both dates and reconcile the copies first.`);
+      }
+      return;
+    }
+    if (command === 'detach' && task.deadline) {
+      throw new CalendarAgentError('Detach does not support deadline tasks.');
+    }
+    const changed = command === 'rename' ? task.text !== args[2].trim() : task.recurrenceId !== null;
+    if (changed) {
+      if (command === 'rename') task.text = args[2].trim();
+      else task.recurrenceId = null;
+      await saveEntry(date, entry);
+      const verified = await getEntry(date);
+      if (!sameEntry(entry, verified)) throw new CalendarAgentError('The date changed during verification. Read the day again before retrying.');
+      output({ date, changed, task: verified.tasks.find((item) => item.id === task.id) });
+    } else output({ date, changed, task });
+    return;
+  }
   if (command === 'review') {
     const reflection = args[1]?.trim();
     if (reflection) {
@@ -186,6 +266,14 @@ export function validateCommand(command, args, timezone) {
       count(1, 2, 'summary day|week|month [YYYY-MM-DD]');
       periodRange(args[0], args[1] ?? localDate(timezone));
       break;
+    case 'leetcode-policy':
+      if (args.length !== 0 && (args.length !== 2 || args[0] !== 'set')) usage('leetcode-policy [set FILE.json]');
+      if (args.length) textAt(1, 4096);
+      break;
+    case 'leetcode-next':
+      count(0, 1, 'leetcode-next [YYYY-MM-DD]'); if (args[0] !== undefined) dateAt(0); break;
+    case 'leetcode-plan':
+      count(1, 1, 'leetcode-plan YYYY-MM-DD'); dateAt(0); break;
     case 'get': case 'fields': count(1, 1, `${command} YYYY-MM-DD`); dateAt(0); break;
     case 'record':
       count(2, 2, 'record YYYY-MM-DD "task"'); dateAt(0); textAt(1);
@@ -198,6 +286,15 @@ export function validateCommand(command, args, timezone) {
     case 'done':
       count(2, 3, 'done YYYY-MM-DD TASK_ID [true|false]'); dateAt(0); idAt(1);
       if (args[2] !== undefined && !['true', 'false'].includes(args[2])) usage('done YYYY-MM-DD TASK_ID [true|false]');
+      break;
+    case 'rename':
+      count(3, 3, 'rename YYYY-MM-DD TASK_ID "task"'); dateAt(0); idAt(1); textAt(2); break;
+    case 'detach':
+      count(2, 2, 'detach YYYY-MM-DD TASK_ID'); dateAt(0); idAt(1); break;
+    case 'reschedule':
+      count(3, 4, 'reschedule SOURCE_DATE TASK_ID TARGET_DATE ["task"]'); dateAt(0); idAt(1); dateAt(2);
+      if (args[0] === args[2]) throw new CalendarAgentError('Reschedule requires different source and target dates.');
+      if (args[3] !== undefined) textAt(3);
       break;
     case 'toggle': case 'remove': case 'unlink': case 'series-remove':
       count(2, 2, `${command} YYYY-MM-DD TASK_ID`); dateAt(0); idAt(1); break;

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { CalendarAgentError, runWorkflow, validateCommand, workflowCommands } from './calendar-agent-workflows.mjs';
+import { leetcodeWorkflowCommands, runLeetcodeWorkflow } from './calendar-agent-leetcode.mjs';
 
 let apiUrl;
 let agentToken;
@@ -13,6 +14,9 @@ async function main() {
   const timezone = process.env.CALENDAR_TIMEZONE || 'Asia/Taipei';
   validateCommand(command, args, timezone);
   configure();
+  if (leetcodeWorkflowCommands.has(command)) {
+    return runLeetcodeWorkflow(command, args, { timezone, apiUrl, agentToken, getEntry, request });
+  }
   if (workflowCommands.has(command)) {
     return runWorkflow(command, args, { timezone, getEntry, saveEntry, getCycles, getSections });
   }
@@ -498,7 +502,9 @@ async function request(path, init = {}) {
   if (!response.ok) {
     const hint = response.status === 409 ? ' Read the latest data before retrying; no automatic overwrite was attempted.'
       : [401, 403].includes(response.status) ? ' Check the account token and optional Sites bypass token.' : '';
-    throw new CalendarAgentError(`Calendar API returned HTTP ${response.status}.${hint}`);
+    const error = new CalendarAgentError(`Calendar API returned HTTP ${response.status}.${hint}`);
+    error.status = response.status;
+    throw error;
   }
   try { return await response.json(); }
   catch { throw new CalendarAgentError('Calendar API returned an invalid JSON response.'); }
@@ -511,6 +517,9 @@ function printHelp() {
   plan       [START_DATE] [END_DATE]  (read-only planning context)
   record     YYYY-MM-DD "task"       (skip an exact normalized duplicate)
   done       YYYY-MM-DD TASK_ID [true|false]
+  rename     YYYY-MM-DD TASK_ID "task"  (change one occurrence)
+  detach     YYYY-MM-DD TASK_ID       (keep task, remove recurrence)
+  reschedule SOURCE_DATE TASK_ID TARGET_DATE ["task"]  (copy, verify, then remove source)
   review     [YYYY-MM-DD] ["reflection"]  (append when text is supplied)
   summary    day|week|month [YYYY-MM-DD]
 
@@ -518,6 +527,8 @@ Dates default to today in CALENDAR_TIMEZONE (Asia/Taipei).
 Agenda and plan default to 7 days; ranges are limited to 31 days.
 Weeks run Monday–Sunday. Completion rates are 0–1, or null for no tasks.
 Routine tasks have recurrenceId and no deadline. Include appointment times in task text.
+Reschedule uses a new task ID and rejects deadline and LeetCode-linked tasks.
+If reschedule stops after copying, read both dates and reconcile before retrying.
 Set CALENDAR_API_URL and CALENDAR_AGENT_TOKEN; CALENDAR_SITES_BYPASS_TOKEN is optional.
 
 Calendar agent commands:
@@ -542,6 +553,14 @@ Macro-cycle commands:
   cycle-create START_DATE END_DATE "title" "goal"
   phase-add   CYCLE_ID START_DATE END_DATE "title" "description"
   cycle-reward CYCLE_ID "reward"`);
+  console.log(`
+On-demand LeetCode policy (private Hermes profile data):
+  leetcode-policy [set FILE.json]  (read or set an account-bound policy)
+  leetcode-next [YYYY-MM-DD]       (read-only next main/review selection)
+  leetcode-plan YYYY-MM-DD         (explicitly schedule that day's saved selection)
+Uses HERMES_HOME/data/daybook; installed bundles infer their own profile.
+Never creates recurring tasks or advances progress merely from scheduling.
+Repeated plans keep the same daily selection and do not recreate known deleted task IDs.`);
   console.log(`
 Daily layout and custom records:
   sections

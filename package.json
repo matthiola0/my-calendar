@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "calendar": "node --env-file-if-exists=.env.local scripts/calendar-agent.mjs",
     "hermes:install": "node scripts/install-hermes.mjs",
-    "test:agent": "node --test scripts/test-agent-auth.mjs scripts/test-calendar-agent.mjs scripts/test-hermes-install.mjs"
+    "test:agent": "node --test scripts/test-agent-auth.mjs scripts/test-calendar-agent.mjs scripts/test-hermes-install.mjs scripts/test-leetcode-policy.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

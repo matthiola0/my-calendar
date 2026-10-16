@@ -1,0 +1,5 @@
+name: daybook-shortcuts
+version: 1.0.0
+description: Daybook 的 Discord 快速指令，直接啟動已安裝的行事曆技能。
+provides_tools: []
+provides_hooks: []
