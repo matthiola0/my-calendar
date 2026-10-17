@@ -428,6 +428,33 @@ switch (command) {
     console.log(`Recorded LeetCode attempt for ${date}.`);
     break;
   }
+  case 'leetcode-attempt-update': {
+    const [problemId, attemptId, status, notesValue] = args;
+    const notes = notesValue.trim();
+    const { problems } = await request('/api/leetcode');
+    const problem = problems.find((item) => item.id === problemId);
+    const attempt = problem?.attempts.find((item) => item.id === attemptId);
+    if (!attempt) throw new CalendarAgentError('Attempt not found for this problem. Read leetcode and select the original attempt ID.');
+    const entry = await getEntry(attempt.attemptedOn);
+    if (attempt.status !== status || attempt.notes !== notes) {
+      await request('/api/leetcode', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'update-attempt', problemId, attemptId, status, notes, expectedStatus: attempt.status, expectedNotes: attempt.notes }),
+      });
+    }
+    const { problems: verifiedProblems } = await request('/api/leetcode');
+    const verifiedProblem = verifiedProblems.find((item) => item.id === problemId);
+    const verified = verifiedProblem?.attempts.find((item) => item.id === attemptId);
+    const afterEntry = await getEntry(attempt.attemptedOn);
+    if (!verified || verified.status !== status || verified.notes !== notes || verified.taskId !== attempt.taskId ||
+        verified.attemptedOn !== attempt.attemptedOn || verified.attemptNumber !== attempt.attemptNumber ||
+        verified.createdAt !== attempt.createdAt || verifiedProblem.attempts.length !== problem.attempts.length ||
+        JSON.stringify(afterEntry) !== JSON.stringify(entry)) {
+      throw new CalendarAgentError('The correction could not be fully verified. Read leetcode and the original date before retrying; do not append a replacement attempt.');
+    }
+    console.log(JSON.stringify({ command, problemId, attempt: verified, changed: attempt.status !== status || attempt.notes !== notes }, null, 2));
+    break;
+  }
   default:
     printHelp();
 }
@@ -577,7 +604,8 @@ LeetCode database:
   leetcode-list-order LIST_ID PROBLEM_ID...
   leetcode-add YYYY-MM-DD easy|medium|hard "title" [URL]
   leetcode-schedule PROBLEM_ID YYYY-MM-DD
-  leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]`);
+  leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]
+  leetcode-attempt-update PROBLEM_ID ATTEMPT_ID stuck|hinted|solved|reviewed "notes"  (correct the original attempt)`);
 }
 
 function fail(message) {

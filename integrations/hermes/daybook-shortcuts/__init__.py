@@ -1,4 +1,50 @@
-"""Expose installed Daybook skills as native Discord commands."""
+"""Expose Daybook commands and refresh LeetCode guidance in Discord turns."""
+
+import re
+
+
+def _message_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(part.get("text", "") for part in content if isinstance(part, dict) and part.get("type") == "text")
+    return ""
+
+
+def _leetcode_context(*, platform="", user_message="", conversation_history=None, **_):
+    if platform != "discord":
+        return None
+    from agent.skill_utils import get_disabled_skill_names
+
+    if "daybook" in get_disabled_skill_names(platform=platform):
+        return None
+    current = _message_text(user_message)
+    recent = [message for message in (conversation_history or []) if message.get("role") in ("user", "assistant")][-6:]
+    mentions_leetcode = re.search(r"leetcode|力扣", current, re.IGNORECASE)
+    # Follow-up answers often contain only an outcome or a learning note. Use only
+    # nearby conversational text; tool output must not activate the workflow.
+    continuing = recent and any(re.search(r"leetcode|力扣", _message_text(message.get("content")), re.IGNORECASE) for message in recent) and re.search(
+        r"心得|解法|提示|卡住|解出|複習|复习|哪.{0,2}題|which problem|takeaway|approach|solved|hint|stuck|review", _message_text(recent[-1].get("content")), re.IGNORECASE)
+    if not mentions_leetcode and not continuing:
+        return None
+    return {"context": (
+        "[Daybook LeetCode workflow refresh for this Discord turn]\n"
+        "Read the CURRENT installed daybook skill and references/workflows.md with skill_view; "
+        "earlier messages may contain obsolete instructions or incorrect recording examples. "
+        "When the user reports practice, collect BOTH the actual outcome and one learning note "
+        "for EACH problem before leetcode-attempt. Ask only for missing information and remember "
+        "answers across turns. A report such as '今天沒複習 LeetCode，寫了兩題' identifies "
+        "attempted problems but supplies neither independent success nor learning notes. Ask "
+        "whether each was independently solved, hinted, stuck, or reviewed, and ask for its "
+        "approach, difficulty, or takeaway. Never use '使用者回報寫了這題' as a substitute note, "
+        "infer solved from '寫了/done' or a checked task, or invent notes from a problem solution. "
+        "Once the user supplies both, save with leetcode-attempt and read back to verify. "
+        "For a correction to an existing practice, collect all requested problems' outcomes and "
+        "notes, then use leetcode-attempt-update on each ORIGINAL attempt ID; never append a "
+        "new attempt or count the correction as another review. "
+        "Queries and future plans stay read-only; do not record an attempt merely because this "
+        "context was added. Respect explicit requests not to save."
+    )}
 
 _HELP = """Daybook 快速指令：
 /daybook-today：讀取今天的行程、例行公事與待辦。
@@ -82,6 +128,7 @@ def _invoke(ctx, name, default_instruction, raw_args):
 
 
 def register(ctx):
+    ctx.register_hook("pre_llm_call", _leetcode_context)
     for name, description, args_hint, default_instruction in _COMMANDS:
         def handler(raw_args, name=name, default_instruction=default_instruction):
             return _invoke(ctx, name, default_instruction, raw_args)

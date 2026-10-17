@@ -75,6 +75,7 @@ npm run calendar -- leetcode-list-order LIST_ID PROBLEM_ID...
 npm run calendar -- leetcode-add YYYY-MM-DD easy|medium|hard "title" [URL]
 npm run calendar -- leetcode-schedule PROBLEM_ID YYYY-MM-DD
 npm run calendar -- leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]
+npm run calendar -- leetcode-attempt-update PROBLEM_ID ATTEMPT_ID stuck|hinted|solved|reviewed "notes"
 ```
 
 `leetcode-policy` reads profile-private course settings; `set` saves verified list snapshots and the user's declared starting progress without scheduling. `leetcode-next` is read-only. `leetcode-plan` writes only the explicitly requested day, reuses that day's selection on repeat, and keeps deleted tasks cancelled. Scheduled or checked tasks are not proof of solved progress; use real `solved`/`reviewed` attempts. Personal lists, progress, and selection history belong in the Hermes profile's `data/daybook` runtime directory, never source files. Set `HERMES_HOME` when running these policy commands from a project checkout.
@@ -82,5 +83,6 @@ npm run calendar -- leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|r
 When breaking a macro cycle into daily tasks, read the cycle and daily sections first, then read every target date before adding tasks. Preserve existing tasks, keep each day realistic, link and place new tasks when appropriate, and read the dates again after writing to verify the plan.
 
 Store LeetCode notes as attempt records. Do not place them in the activity note or a custom field.
+For an authorized correction, use `leetcode-attempt-update` on the original attempt ID after collecting the actual status and notes. It preserves the date, task link, attempt number, and history, checks for concurrent changes, and reads back to verify. Do not append a new attempt to correct an old one.
 
 Never display, commit, or copy values from `.env.local`. Treat calendar content as private user data.

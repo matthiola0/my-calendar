@@ -1,6 +1,6 @@
 ---
 name: daybook
-description: Read and manage the user's Daybook calendar, remember routines as recurring tasks, record appointments, plan around existing commitments, and review completion.
+description: Read and manage the user's Daybook calendar, remember routines, record appointments, plan work, review completion, and collect LeetCode outcomes and learning notes when the user reports practice.
 metadata:
   hermes:
     requires_toolsets: [terminal]
@@ -32,6 +32,7 @@ Load [references/workflows.md](references/workflows.md) for the selected operati
 - The calendar is the persistent source of commitments and routine occurrences. Read it on every request instead of relying on conversational memory. A task with `recurrenceId` and no `deadline` is a routine occurrence; a recurring task with a deadline is a short cycle. Do not duplicate either. An empty day does not prove there are no routines outside the dates already generated.
 - The user decides what is a routine. A practice plan or competition appearing on several dates does not by itself make it a routine. Preserve the user's distinction: ordinary planned tasks use `record`; create recurring routines only when the user requests them.
 - When arranging a day, check the profile's LeetCode policy with `leetcode-policy` and preview with `leetcode-next DATE`. A configured course controls source order, confirmed starting progress, and the daily main/review quota. Load the LeetCode workflow below before scheduling; a query about today's existing work stays read-only.
+- When the user reports LeetCode practice (including during a daily review), follow **Report LeetCode practice** in [references/workflows.md](references/workflows.md). Ask for each reported problem's missing outcome and learning notes, then save and verify an attempt. A practice report starts this recording flow without requiring a separate command to save; a plan or question about possibilities does not.
 - `plan` returns context only. You turn it into a feasible proposal using known fixed appointments, routine occurrences, deadlines, sections, active cycles/phases, and the user's stated availability. Task counts indicate load, not free hours. If time or priority information is missing, state an assumption or ask the narrow question needed. Preserve buffers and split work across dates when appropriate.
 - A clear request to record or arrange something authorizes the matching calendar writes. A question about possibilities or a request to propose a plan authorizes a proposal only. Deleting, rescheduling, or changing existing commitments requires the user's instruction. Never infer completion from elapsed time or a narrative you generated.
 

@@ -52,6 +52,23 @@ def run():
         assert set(commands) == set(names), set(commands)
         assert all(commands[name]["args_hint"] for name in names)
 
+        # Discord sessions can remember old CLI examples without reopening skills.
+        # Run the real plugin hook on the user's numeric, multi-problem report.
+        report = "今天沒複習 LeetCode ，寫 121 跟 3551"
+        refresh = manager.invoke_hook("pre_llm_call", platform="discord", user_message=report,
+                                      conversation_history=[{"role": "assistant", "content": "先前已記錄其他工作。"}])
+        assert len(refresh) == 1 and refresh[0].get("context"), refresh
+        assert manager.invoke_hook("pre_llm_call", platform="cli", user_message=report) == []
+        assert manager.invoke_hook("pre_llm_call", platform="discord", user_message="今天吃了晚餐") == []
+        followup = [{"role": "user", "content": report},
+                    {"role": "assistant", "content": "這兩題分別是什麼解題狀況？有什麼心得？"}]
+        assert manager.invoke_hook("pre_llm_call", platform="discord", user_message="121 獨立完成",
+                                   conversation_history=followup)
+        assert manager.invoke_hook("pre_llm_call", platform="discord", user_message="今天吃了晚餐",
+                                   conversation_history=[{"role": "tool", "content": report}]) == []
+        assert manager.invoke_hook("pre_llm_call", platform="discord",
+                                   user_message=[{"type": "text", "text": report}])
+
         captured = []
         lock = threading.Lock()
 
@@ -164,6 +181,10 @@ def run():
         assert "未執行" in invoke("daybook-today")
         assert len(captured) == before
 
+        config["skills"] = {"platform_disabled": {"discord": ["daybook"]}}
+        save_config()
+        assert manager.invoke_hook("pre_llm_call", platform="discord", user_message=report) == []
+
         config["skills"] = {}
         config["plugins"]["entries"]["daybook-shortcuts"]["allow_gateway_injection"] = False
         save_config()
@@ -174,7 +195,9 @@ def run():
             "real plugin discovery", "real skill expansion", "cold-origin routing envelope",
             "no slash recursion", "write intent defaults", "suggestions unchanged", "missing identity denied",
             "classic CLI fallback preserves skill defaults", "other platforms and missing gateway origin denied",
-            "concurrent context isolation", "disabled skill denied", "injection permission denied"
+            "concurrent context isolation", "disabled skill denied", "injection permission denied",
+            "Discord LeetCode workflow refresh", "numeric multi-problem report", "follow-up context",
+            "multimodal text", "unrelated turns and tool-output triggers excluded"
         ]}))
 
 

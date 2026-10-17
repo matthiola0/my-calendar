@@ -336,6 +336,7 @@ export function validateCommand(command, args, timezone) {
       break;
     case 'leetcode-schedule': count(2, 2, 'leetcode-schedule PROBLEM_ID YYYY-MM-DD'); idAt(0); dateAt(1); break;
     case 'leetcode-attempt': count(4, 5, 'leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]'); idAt(0); dateAt(1); textAt(3, 20_000); if (!['stuck', 'hinted', 'solved', 'reviewed'].includes(args[2])) usage('leetcode-attempt PROBLEM_ID YYYY-MM-DD stuck|hinted|solved|reviewed "notes" [TASK_ID]'); if (args[4] !== undefined) idAt(4); break;
+    case 'leetcode-attempt-update': count(4, 4, 'leetcode-attempt-update PROBLEM_ID ATTEMPT_ID stuck|hinted|solved|reviewed "notes"'); idAt(0); idAt(1); textAt(3, 10_000); if (!['stuck', 'hinted', 'solved', 'reviewed'].includes(args[2])) usage('leetcode-attempt-update PROBLEM_ID ATTEMPT_ID stuck|hinted|solved|reviewed "notes"'); break;
     default: throw new CalendarAgentError('Unknown calendar command. Run calendar -- help for the command list.');
   }
 }

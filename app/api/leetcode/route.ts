@@ -111,6 +111,7 @@ export async function POST(request: Request) {
   if (candidate.action === 'reorder-list') return reorderList(db, ownerId, candidate);
   if (candidate.action === 'schedule') return scheduleProblem(db, ownerId, candidate);
   if (candidate.action === 'attempt') return recordAttempt(db, ownerId, candidate);
+  if (candidate.action === 'update-attempt') return updateAttempt(db, ownerId, candidate);
   return createProblem(db, ownerId, candidate);
 }
 
@@ -320,6 +321,30 @@ async function recordAttempt(db: D1Database, ownerId: string, candidate: Record<
   }
   await db.batch(statements);
   return Response.json({ ok: true, id, revision }, { status: 201 });
+}
+
+async function updateAttempt(db: D1Database, ownerId: string, candidate: Record<string, unknown>) {
+  const problemId = optionalId(candidate.problemId);
+  const attemptId = optionalId(candidate.attemptId);
+  const status = typeof candidate.status === 'string' && ATTEMPT_STATUSES.has(candidate.status) ? candidate.status : null;
+  const notes = typeof candidate.notes === 'string' ? candidate.notes.trim() : '';
+  const expectedStatus = typeof candidate.expectedStatus === 'string' && ATTEMPT_STATUSES.has(candidate.expectedStatus) ? candidate.expectedStatus : null;
+  const expectedNotes = typeof candidate.expectedNotes === 'string' ? candidate.expectedNotes : '';
+  if (!problemId || !attemptId || !status || !notes || notes.length > 10_000 || !expectedStatus || !expectedNotes || expectedNotes.length > 10_000) {
+    return invalid('請提供作答紀錄、狀況與心得，以及讀取到的原始狀況與心得。');
+  }
+  const existing = await db.prepare(`
+    SELECT status, notes FROM leetcode_attempts
+    WHERE owner_id = ? AND problem_id = ? AND id = ?
+  `).bind(ownerId, problemId, attemptId).first<{ status: string; notes: string }>();
+  if (!existing) return Response.json({ error: '找不到這筆作答紀錄。' }, { status: 404 });
+  if (existing.status === status && existing.notes === notes) return Response.json({ ok: true, id: attemptId, changed: false });
+  const result = await db.prepare(`
+    UPDATE leetcode_attempts SET status = ?, notes = ?, updated_at = ?
+    WHERE owner_id = ? AND problem_id = ? AND id = ? AND status = ? AND notes = ?
+  `).bind(status, notes, Date.now(), ownerId, problemId, attemptId, expectedStatus, expectedNotes).run();
+  if (result.meta.changes !== 1) return Response.json({ error: '作答紀錄已變更，請重新讀取後再更正。' }, { status: 409 });
+  return Response.json({ ok: true, id: attemptId, changed: true });
 }
 
 async function ownsList(db: D1Database, ownerId: string, listId: string) {
