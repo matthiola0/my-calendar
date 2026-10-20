@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { CalendarAgentError, runWorkflow, validateCommand, workflowCommands } from './calendar-agent-workflows.mjs';
+import { CalendarAgentError, localDate, runWorkflow, validateCommand, workflowCommands } from './calendar-agent-workflows.mjs';
 import { leetcodeWorkflowCommands, runLeetcodeWorkflow } from './calendar-agent-leetcode.mjs';
 
 let apiUrl;
@@ -25,6 +25,13 @@ async function main() {
 
 async function runLegacyCommand(command, args) {
 switch (command) {
+  case 'short-list': {
+    const timezone = process.env.CALENDAR_TIMEZONE || 'Asia/Taipei';
+    const date = args[0] ?? localDate(timezone);
+    const result = await request(`/api/short-tasks?date=${encodeURIComponent(date)}`);
+    console.log(JSON.stringify({ command, timezone, ...result }, null, 2));
+    break;
+  }
   case 'get': {
     const [date] = args;
     if (!date) printHelp();
@@ -540,6 +547,7 @@ async function request(path, init = {}) {
 function printHelp() {
   console.log(`Hermes quick commands (JSON output):
   today      [YYYY-MM-DD]
+  short-list [YYYY-MM-DD]  (all unfinished short-term tasks, grouped by series)
   agenda     [START_DATE] [END_DATE]
   plan       [START_DATE] [END_DATE]  (read-only planning context)
   record     YYYY-MM-DD "task"       (skip an exact normalized duplicate)

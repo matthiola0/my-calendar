@@ -1,5 +1,5 @@
 name: daybook-shortcuts
-version: 1.1.0
+version: 1.2.0
 description: Daybook 的 Discord 快速指令，並在 LeetCode 對話中載入最新作答紀錄流程。
 provides_tools: []
 provides_hooks: [pre_llm_call]

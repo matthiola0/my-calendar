@@ -6,6 +6,12 @@ Use the CLI invocation from the main skill. `help` lists all commands. These exa
 
 Run `calendar today [YYYY-MM-DD]`. Present fixed appointments (including any times written in their titles), pending routine occurrences, other pending tasks grouped by real day section, deadlines, and completed/total counts. Mention habit cues and two-minute starts when helpful. Do not invent appointments, priorities, or missing time estimates. If the user asks what to start with, recommend a practical next action and say why.
 
+## Short-term task list
+
+Run `calendar short-list [YYYY-MM-DD]`. The optional date is the as-of date; by default the CLI uses `CALENDAR_TIMEZONE` (Asia/Taipei). It reads all stored tasks with deadlines, groups each recurring series once, keeps standalone deadline tasks separate, excludes groups whose every occurrence is checked, and sorts by deadline. This includes overdue and not-yet-started work without the 31-day agenda limit. Do not scan an arbitrary agenda window and call it the complete short-term list.
+
+Show the text, deadline, overdue/active/upcoming status, and remaining occurrence count for each group. Use `elapsedPendingOccurrences` and `futurePendingOccurrences` to distinguish elapsed unfinished work from future work. These are per-day checkboxes, not proof that the overall deliverable is unfinished; preserve that distinction. Do not count a checked occurrence as finishing the entire series, merge different series by matching titles, or write anything while listing. If the user subsequently asks to change a task, read its actual date again and use the appropriate existing CLI command.
+
 ## Record an appointment or task
 
 Resolve the date with a fresh `today` read, then read `get YYYY-MM-DD` before `record YYYY-MM-DD "14:00 Dentist"`. Keep exact stated times and context in the title; include an end time or duration only if supplied. If the date/time is ambiguous enough to change the commitment, clarify it. Verify with `get`. `record` deduplicates normalized identical titles on that date; it does not detect differently worded duplicates. Compare existing tasks first. Place new tasks in existing sections with `move DATE TASK_ID SECTION_ID` when appropriate.

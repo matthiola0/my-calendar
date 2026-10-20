@@ -6,6 +6,7 @@ For agent workflows (dates default to `CALENDAR_TIMEZONE`, or `Asia/Taipei`):
 
 ```bash
 npm run calendar -- today [YYYY-MM-DD]
+npm run calendar -- short-list [YYYY-MM-DD]
 npm run calendar -- agenda [START_DATE] [END_DATE]
 npm run calendar -- plan [START_DATE] [END_DATE]
 npm run calendar -- summary day|week|month [YYYY-MM-DD]
@@ -39,6 +40,8 @@ npm run calendar -- series-remove YYYY-MM-DD TASK_ID
 npm run calendar -- activity YYYY-MM-DD "what happened"
 npm run calendar -- reflection YYYY-MM-DD "reflection"
 ```
+
+`short-list` is read-only. It lists all stored unfinished deadline groups across dates (including overdue and future work), merges occurrences by recurring series, and sorts by deadline. The optional date is an as-of date, not an agenda range. Completion counts refer to dated occurrences; do not infer goal completion from one checked day.
 
 For macro-cycle planning:
 

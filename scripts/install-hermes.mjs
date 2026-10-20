@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const skillNames = ['daybook', 'daybook-today', 'daybook-plan', 'daybook-review', 'daybook-status'];
+const skillNames = ['daybook', 'daybook-today', 'daybook-plan', 'daybook-review', 'daybook-status', 'daybook-short'];
 const usage = 'Usage: npm run hermes:install -- [--home HERMES_HOME] [--discord] [--force]';
 
 try {
@@ -67,7 +67,7 @@ async function install(hermesHome, force, discord) {
   }
   console.log(`Installed ${skillNames.length} Daybook skills in ${skillsRoot}.`);
   console.log('Configure CALENDAR_API_URL and CALENDAR_AGENT_TOKEN securely in the Hermes environment, then restart/reload Hermes.');
-  console.log('Terminal commands: /daybook, /daybook-today, /daybook-plan, /daybook-review, /daybook-status day|week|month');
+  console.log('Terminal commands: /daybook, /daybook-today, /daybook-short, /daybook-plan, /daybook-review, /daybook-status day|week|month');
   if (discord) {
     console.log('Installed daybook-shortcuts for direct Discord /daybook-* commands.');
     console.log('Enable: hermes config set plugins.entries.daybook-shortcuts.allow_gateway_injection true');

@@ -253,6 +253,7 @@ export function validateCommand(command, args, timezone) {
     if (bounded) dateRange(args[start], args[end]);
   };
   switch (command) {
+    case 'short-list': count(0, 1, 'short-list [YYYY-MM-DD]'); if (args[0] !== undefined) dateAt(0); break;
     case 'today': case 'review':
       count(0, command === 'review' ? 2 : 1, `${command} [YYYY-MM-DD]${command === 'review' ? ' ["reflection"]' : ''}`);
       if (args[0] !== undefined) dateAt(0);

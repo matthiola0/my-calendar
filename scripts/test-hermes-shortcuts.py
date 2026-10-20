@@ -26,7 +26,7 @@ def run():
         home = Path(temporary)
         os.environ["HERMES_HOME"] = str(home)
         os.environ.pop("HERMES_PLATFORM", None)
-        names = ("daybook", "daybook-today", "daybook-plan", "daybook-review", "daybook-status")
+        names = ("daybook", "daybook-today", "daybook-plan", "daybook-review", "daybook-status", "daybook-short")
         for name in names:
             shutil.copytree(PROJECT / "integrations/hermes" / name, home / "skills" / name)
         shutil.copytree(PROJECT / "integrations/hermes/daybook-shortcuts", home / "plugins/daybook-shortcuts")
@@ -94,7 +94,7 @@ def run():
 
         for name in names[1:]:
             assert invoke(name) is None
-        assert len(captured) == 4
+        assert len(captured) == 5
         assert set(get_skill_commands()) >= {"/" + name for name in names}
         assert not list(home.glob("sessions/*")), "cold invocation must not require a stored session"
 
@@ -116,6 +116,9 @@ def run():
         assert "安排並儲存今天" in instructions[1]
         assert "先不要儲存" in instructions[2]
         assert instructions[3] == "day"
+        assert "未完成的短期待辦" in instructions[4] and "不修改" in instructions[4]
+        assert invoke("daybook-short", "以 2026-10-20 為基準") is None
+        assert extract_user_instruction_from_skill_message(captured[-1]["content"]) == "以 2026-10-20 為基準"
 
         requested = "只給建議，不要儲存。保留 20:30 的 meeting。"
         assert invoke("daybook-plan", requested) is None

@@ -48,6 +48,7 @@ def _leetcode_context(*, platform="", user_message="", conversation_history=None
 
 _HELP = """Daybook 快速指令：
 /daybook-today：讀取今天的行程、例行公事與待辦。
+/daybook-short：列出跨日期的未完成短期待辦，依截止日排序並合併同一項。
 /daybook-plan：安排並儲存今天的待辦；可在 args 填入需求。
 /daybook-review：複盤今天；填入心得時才會記錄。
 /daybook-status：查看完成狀況，args 可填 day、week 或 month。
@@ -59,6 +60,7 @@ _COMMANDS = (
     ("daybook-plan", "Daybook：安排並儲存今天的待辦", "[安排需求；只要建議請註明]", "幫我安排並儲存今天的待辦，遵守現行的例行公事、工作量與 LeetCode 規則，只安排今天。"),
     ("daybook-review", "Daybook：複盤今天；提供心得才會記錄", "[日期或心得]", "幫我複盤今天，只讀取實際完成與待辦狀況；先不要儲存心得或修改待辦。"),
     ("daybook-status", "Daybook：查看日、週、月完成狀況（唯讀）", "[day、week、month 或日期]", "day"),
+    ("daybook-short", "Daybook：列出未完成的短期待辦與截止日（唯讀）", "[基準日期或查詢需求]", "列出所有未完成的短期待辦，包含逾期與未來安排，依截止日排序，同一系列合併顯示。只查詢，不修改資料。"),
 )
 
 _ROUTE_FIELDS = (

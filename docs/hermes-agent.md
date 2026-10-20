@@ -16,7 +16,7 @@ Hermes 可以使用自己的模型來讀取 Daybook、記錄行程、維護例�
 npm run hermes:install
 ```
 
-安裝器將五個技能及獨立 CLI 放入 `$HERMES_HOME/skills`；未設定時使用 `~/.hermes/skills`。安裝後執行 CLI 不需要專案或 npm dependencies。安裝器不讀取或複製 `.env.local`、密碼、Token，也不修改 Hermes 設定檔。重複執行可更新安裝器管理的檔案；遇到手動修改會停止，保留修改後才使用 `--force` 覆蓋。
+安裝器將六個技能及獨立 CLI 放入 `$HERMES_HOME/skills`；未設定時使用 `~/.hermes/skills`。安裝後執行 CLI 不需要專案或 npm dependencies。安裝器不讀取或複製 `.env.local`、密碼、Token，也不修改 Hermes 設定檔。重複執行可更新安裝器管理的檔案；遇到手動修改會停止，保留修改後才使用 `--force` 覆蓋。
 
 不同 profile 或自訂位置可指定：
 
@@ -70,6 +70,7 @@ hermes gateway restart
 | Discord 指令 | 行為 |
 | --- | --- |
 | `/daybook-today` | 唯讀查詢今天的行程、例行公事與待辦 |
+| `/daybook-short` | 唯讀列出未完成短期待辦，跨日期合併同系列並依截止日排序 |
 | `/daybook-plan` | 安排並儲存今天，依目前 LeetCode 規則選題 |
 | `/daybook-plan`，`args: 建議下週怎麼安排` | 只提出建議，尚不寫入 |
 | `/daybook-review` | 開始複盤；`args` 可填入要記錄的心得 |
@@ -87,6 +88,7 @@ hermes gateway restart
 | 操作 | `name` | `args` |
 | --- | --- | --- |
 | 今天要做什麼 | `daybook-today` | 留空 |
+| 未完成的短期待辦 | `daybook-short` | 留空，或指定基準日期 |
 | 安排今天 | `daybook-plan` | `幫我安排今天` |
 | 只看安排建議 | `daybook-plan` | `建議下週怎麼安排` |
 | 開始複盤 | `daybook-review` | 留空或填入心得 |
@@ -102,6 +104,7 @@ Hermes 傳統終端機可直接使用以下技能名稱。啟用 `daybook-shortc
 | Hermes 終端機指令 | 行為 |
 | --- | --- |
 | `/daybook-today` | 今天的行程、例行公事、待辦與完成數 |
+| `/daybook-short` | 所有未完成短期待辦，含逾期、進行中與未來安排 |
 | `/daybook-plan 幫我安排今天` | 讀取原有行程與工作量，再安排並記錄新增工作 |
 | `/daybook-plan 建議下週怎麼安排` | 提出建議，尚不寫入 |
 | `/daybook-review` | 根據當天實際紀錄開始複盤 |
@@ -113,6 +116,12 @@ Hermes 傳統終端機可直接使用以下技能名稱。啟用 `daybook-shortc
 | `/daybook 每週一早上七點跑步，先安排接下來十二週` | 建立有限次數的例行任務 |
 
 也可以直接說「今天要做什麼」「幫我安排」「開始複盤」「這週做完多少」，由 Hermes 選用技能。快速指令屬於 Hermes，Daybook 網頁的內建 AI 對話維持原有操作。
+
+### 短期待辦清單
+
+`/daybook-short` 不受今日或 31 天日期範圍限制，會讀取所有有截止日且仍有未勾選日期的任務，同一重複系列只列一項，依截止日排序。每項顯示截止日、逾期／進行中／尚未開始，以及剩餘次數；已到日期未完成與未來已排定次數會分開。整組日期都勾選後便不再列出，單日完成不會被當成整組完成。不同系列即使同名仍各自列出。
+
+專案 CLI 使用 `npm run calendar -- short-list [YYYY-MM-DD]`；日期是基準日，預設為設定時區的今天，並非篩選期間。Discord 可在 `args` 填入基準日期。此查詢不新增、勾選或修改任務。
 
 ## 記錄與規劃原則
 

@@ -19,6 +19,8 @@ assert.equal(await readFile(cli, 'utf8'), await readFile(join(root, 'scripts/cal
 const help = spawnSync(process.execPath, [cli, 'help'], { cwd: tmpdir(), encoding: 'utf8', env: {} });
 assert.equal(help.status, 0, help.stderr);
 assert.match(help.stdout, /today/);
+assert.match(help.stdout, /short-list/);
+assert.equal(await readFile(join(hermesHome, 'skills/daybook-short/SKILL.md'), 'utf8'), await readFile(join(root, 'integrations/hermes/daybook-short/SKILL.md'), 'utf8'));
 assert.equal(install().status, 0, 'repeated installation is safe');
 assert.deepEqual((await readdir(hermesHome)).sort(), ['skills'], 'no environment/config files are copied');
 const wrapper = join(hermesHome, 'skills/daybook-today/SKILL.md');
