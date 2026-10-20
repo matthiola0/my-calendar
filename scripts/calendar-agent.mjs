@@ -547,7 +547,7 @@ async function request(path, init = {}) {
 function printHelp() {
   console.log(`Hermes quick commands (JSON output):
   today      [YYYY-MM-DD]
-  short-list [YYYY-MM-DD]  (all unfinished short-term tasks, grouped by series)
+  short-list [YYYY-MM-DD]  (unfinished short-term tasks; hide more than 7 days overdue)
   agenda     [START_DATE] [END_DATE]
   plan       [START_DATE] [END_DATE]  (read-only planning context)
   record     YYYY-MM-DD "task"       (skip an exact normalized duplicate)

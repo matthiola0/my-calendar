@@ -41,7 +41,7 @@ npm run calendar -- activity YYYY-MM-DD "what happened"
 npm run calendar -- reflection YYYY-MM-DD "reflection"
 ```
 
-`short-list` is read-only. It lists all stored unfinished deadline groups across dates (including overdue and future work), merges occurrences by recurring series, and sorts by deadline. The optional date is an as-of date, not an agenda range. Completion counts refer to dated occurrences; do not infer goal completion from one checked day.
+`short-list` is read-only. It lists unfinished deadline groups across dates, merges occurrences by recurring series, and sorts by deadline. It hides groups overdue by more than seven days relative to the as-of date, retaining exactly seven days overdue and all future work without deleting records. The optional date is an as-of date, not an agenda range. Completion counts refer to dated occurrences; do not infer goal completion from one checked day.
 
 For macro-cycle planning:
 

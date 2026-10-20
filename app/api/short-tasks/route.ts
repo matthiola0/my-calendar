@@ -1,7 +1,7 @@
 import { ensureSchema } from '../../../db/ensure-schema';
 import { getDatabaseBinding } from '../../../db';
 import { getAuthorizedOwnerId } from '../../lib/calendar-auth';
-import { isValidDate } from '../../lib/calendar-dates';
+import { isValidDate, shiftDate } from '../../lib/calendar-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,12 +12,13 @@ export async function GET(request: Request) {
   if (!ownerId) return Response.json({ error: '需要登入或有效的 agent 金鑰。' }, { status: 401 });
   const date = new URL(request.url).searchParams.get('date');
   if (!date || !isValidDate(date)) return Response.json({ error: '日期格式不正確。' }, { status: 400 });
+  const oldestDeadline = shiftDate(date, -7);
   await ensureSchema();
   const rows = await getDatabaseBinding().prepare(`
     SELECT id, date, text, done, recurrence_id AS recurrenceId, deadline
-    FROM tasks WHERE owner_id = ? AND deadline IS NOT NULL
+    FROM tasks WHERE owner_id = ? AND deadline >= ?
     ORDER BY date, id
-  `).bind(ownerId).all<Occurrence>();
+  `).bind(ownerId, oldestDeadline).all<Occurrence>();
   const groups = new Map<string, Occurrence[]>();
   for (const occurrence of rows.results) {
     const key = occurrence.recurrenceId ? `series:${occurrence.recurrenceId}` : `task:${occurrence.id}`;
