@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useMemo, useSyncExternalStore } from 'react';
 
 export type Language = 'en' | 'zh' | 'ja';
 
@@ -404,11 +404,16 @@ function readLanguage(): Language {
 }
 
 function subscribeLanguage(listener: () => void) {
-  window.addEventListener('storage', listener);
-  window.addEventListener(LANGUAGE_EVENT, listener);
+  const syncLanguage = () => {
+    document.documentElement.lang = documentLanguage[readLanguage()];
+    listener();
+  };
+  window.addEventListener('storage', syncLanguage);
+  window.addEventListener(LANGUAGE_EVENT, syncLanguage);
+  syncLanguage();
   return () => {
-    window.removeEventListener('storage', listener);
-    window.removeEventListener(LANGUAGE_EVENT, listener);
+    window.removeEventListener('storage', syncLanguage);
+    window.removeEventListener(LANGUAGE_EVENT, syncLanguage);
   };
 }
 
@@ -423,10 +428,6 @@ const I18nContext = createContext<I18nValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const language = useSyncExternalStore<Language>(subscribeLanguage, readLanguage, () => 'en');
-
-  useEffect(() => {
-    document.documentElement.lang = documentLanguage[language];
-  }, [language]);
 
   const setLanguage = useCallback((next: Language) => {
     window.localStorage.setItem(STORAGE_KEY, next);

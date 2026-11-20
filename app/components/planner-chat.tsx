@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent, useMemo, useRef, useState } from 'react';
 import type { PlannerChatMessage, PlannerProposal, PlannerReply } from '../lib/planner-types';
 import { useI18n } from '../lib/i18n';
 
@@ -42,6 +42,10 @@ const learningCopy = {
   },
 };
 
+function scrollToChatEnd(node: HTMLDivElement | null) {
+  node?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 export default function PlannerChat({
   selectedDate,
   onApplied,
@@ -63,7 +67,6 @@ export default function PlannerChat({
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<'ready' | 'sending' | 'applying'>('ready');
   const [error, setError] = useState('');
-  const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const timezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Taipei',
@@ -79,10 +82,6 @@ export default function PlannerChat({
     { label: t('suggestionHabitLabel'), prompt: t('suggestionHabitPrompt') },
     { label: t('suggestionAdjustLabel'), prompt: t('suggestionAdjustPrompt') },
   ];
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [messages, status]);
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -244,7 +243,7 @@ export default function PlannerChat({
                 <div className="planner-bubble"><span /><span /><span /></div>
               </article>
             ) : null}
-            <div ref={endRef} />
+            <div key={`${messages.at(-1)?.id}:${status}`} ref={scrollToChatEnd} />
           </div>
 
           <form className="planner-composer" onSubmit={submit}>

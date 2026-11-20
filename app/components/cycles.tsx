@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { useI18n } from '@/app/lib/i18n';
 
 type CyclePhase = {
@@ -44,34 +44,20 @@ function displayDate(value: string, locale: string) {
   });
 }
 
-async function readCycles() {
-  const response = await fetch('/api/cycles', { cache: 'no-store' });
+export async function readCycles(signal?: AbortSignal) {
+  const response = await fetch('/api/cycles', { cache: 'no-store', signal });
   if (!response.ok) throw new Error('Unable to load cycles');
   return response.json() as Promise<{ cycles: MacroCycle[] }>;
 }
 
-export default function Cycles() {
+export default function Cycles({ initialData }: { initialData?: Awaited<ReturnType<typeof readCycles>> | null }) {
   const { locale, t } = useI18n();
-  const [cycles, setCycles] = useState<MacroCycle[]>([]);
+  const [savedCycles, setSavedCycles] = useState<MacroCycle[] | null>(null);
   const [draft, setDraft] = useState<MacroCycle | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
+  const [saveStatus, setSaveStatus] = useState<'ready' | 'saving' | 'error' | null>(null);
   const [message, setMessage] = useState('');
-
-  useEffect(() => {
-    let active = true;
-    readCycles()
-      .then((result) => {
-        if (!active) return;
-        setCycles(result.cycles);
-        setStatus('ready');
-      })
-      .catch(() => {
-        if (active) setStatus('error');
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const cycles = savedCycles ?? initialData?.cycles ?? [];
+  const status = saveStatus ?? (initialData === undefined ? 'loading' : initialData ? 'ready' : 'error');
 
   const startNewCycle = () => {
     const start = new Date();
@@ -126,7 +112,7 @@ export default function Cycles() {
   const saveCycle = async (event: FormEvent) => {
     event.preventDefault();
     if (!draft) return;
-    setStatus('saving');
+    setSaveStatus('saving');
     setMessage('');
     try {
       const response = await fetch('/api/cycles', {
@@ -138,12 +124,12 @@ export default function Cycles() {
         throw new Error(t('saveFailed'));
       }
       const result = await readCycles();
-      setCycles(result.cycles);
+      setSavedCycles(result.cycles);
       setDraft(null);
-      setStatus('ready');
+      setSaveStatus('ready');
       setMessage(t('cycleSaved'));
     } catch (error) {
-      setStatus('error');
+      setSaveStatus('error');
       setMessage(error instanceof Error ? error.message : t('saveFailed'));
     }
   };

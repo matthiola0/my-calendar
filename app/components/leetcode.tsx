@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { useI18n } from '../lib/i18n';
 
 type AttemptStatus = 'stuck' | 'hinted' | 'solved' | 'reviewed';
@@ -150,14 +150,24 @@ export function AttemptDialog({
   );
 }
 
-export default function LeetCode({ onCalendarChanged }: { onCalendarChanged: () => void }) {
+export async function readLeetCode(signal?: AbortSignal) {
+  const response = await fetch('/api/leetcode', { cache: 'no-store', signal });
+  if (!response.ok) throw new Error('Unable to load LeetCode');
+  return response.json() as Promise<{ lists: LeetCodeList[]; problems: Problem[] }>;
+}
+
+type LeetCodeData = Awaited<ReturnType<typeof readLeetCode>>;
+const emptyData: LeetCodeData = { lists: [], problems: [] };
+
+export default function LeetCode({ initialData, onCalendarChanged }: {
+  initialData?: LeetCodeData | null;
+  onCalendarChanged: () => void;
+}) {
   const { language, locale } = useI18n();
   const m = copy[language];
-  const [lists, setLists] = useState<LeetCodeList[]>([]);
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [updatedData, setUpdatedData] = useState<LeetCodeData | null>(null);
   const [activeList, setActiveList] = useState<'all' | string>('all');
   const [newListTitle, setNewListTitle] = useState('');
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [title, setTitle] = useState('');
@@ -171,32 +181,13 @@ export default function LeetCode({ onCalendarChanged }: { onCalendarChanged: () 
   const [attemptProblem, setAttemptProblem] = useState<Problem | null>(null);
   const [detail, setDetail] = useState<{ problem: Problem; attempt: Attempt } | null>(null);
 
-  const load = async () => {
-    const response = await fetch('/api/leetcode', { cache: 'no-store' });
-    if (!response.ok) throw new Error(m.loadError);
-    const result = await response.json() as { lists: LeetCodeList[]; problems: Problem[] };
-    setLists(result.lists);
-    setProblems(result.problems);
-    return result;
-  };
+  const { lists, problems } = updatedData ?? initialData ?? emptyData;
+  const loading = !updatedData && initialData === undefined;
+  const statusMessage = message || (!updatedData && initialData === null ? m.loadError : '');
 
-  useEffect(() => {
-    let active = true;
-    fetch('/api/leetcode', { cache: 'no-store' })
-      .then(async (response) => {
-        if (!response.ok) throw new Error();
-        return response.json() as Promise<{ lists: LeetCodeList[]; problems: Problem[] }>;
-      })
-      .then((result) => {
-        if (active) {
-          setLists(result.lists);
-          setProblems(result.problems);
-        }
-      })
-      .catch(() => { if (active) setMessage(m.loadError); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [m.loadError]);
+  const load = async () => {
+    setUpdatedData(await readLeetCode());
+  };
 
   const stats = useMemo(() => ({
     planned: problems.flatMap((problem) => problem.scheduledTasks).filter((task) => !task.done).length,
@@ -233,8 +224,8 @@ export default function LeetCode({ onCalendarChanged }: { onCalendarChanged: () 
       if (!response.ok) throw new Error();
       setTitle('');
       setUrl('');
-      await load();
       onCalendarChanged();
+      await load();
     } catch {
       setMessage(m.saveError);
     } finally {
@@ -310,8 +301,8 @@ export default function LeetCode({ onCalendarChanged }: { onCalendarChanged: () 
       if (!response.ok) throw new Error();
       const result = await response.json() as { created: boolean };
       if (!result.created) setMessage(m.alreadyScheduled);
+      if (result.created) onCalendarChanged();
       await load();
-      onCalendarChanged();
     } catch {
       setMessage(m.saveError);
     } finally {
@@ -356,7 +347,7 @@ export default function LeetCode({ onCalendarChanged }: { onCalendarChanged: () 
         <button className="primary-button" type="submit" disabled={saving || !title.trim()}>{saving ? m.adding : m.add}</button>
       </form>
 
-      {message && <p className="leetcode-message" role="status">{message}</p>}
+      {statusMessage && <p className="leetcode-message" role="status">{statusMessage}</p>}
 
       <section className="leetcode-workspace" aria-busy={loading}>
         <aside className="leetcode-folders">

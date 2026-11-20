@@ -1,8 +1,9 @@
 'use client';
 
+// eslint-disable-next-line no-restricted-imports -- Daybook must load the browser's initial date and clean up pending work on unmount.
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Cycles from './cycles';
-import LeetCode, { AttemptDialog } from './leetcode';
+import Cycles, { readCycles } from './cycles';
+import LeetCode, { AttemptDialog, readLeetCode } from './leetcode';
 import PlannerChat from './planner-chat';
 import AgentAccess from './agent-access';
 import { Language, useI18n } from '../lib/i18n';
@@ -12,6 +13,10 @@ type CycleOption = { id: string; title: string; phases: Array<{ id: string; titl
 type CustomField = { id: string; title: string; content: string };
 type SyncStatus = 'loading' | 'saving' | 'saved' | 'conflict' | 'error';
 type RepeatMode = '' | 'short' | 'day' | 'week' | 'month';
+type View =
+  | { name: 'daily' | 'planner' }
+  | { name: 'cycles'; initialData?: Awaited<ReturnType<typeof readCycles>> | null }
+  | { name: 'leetcode'; initialData?: Awaited<ReturnType<typeof readLeetCode>> | null };
 
 const emptyEntry: DayEntry = { tasks: [], activity: '', reflection: '', revision: null };
 const MAX_SHORT_CYCLE_DAYS = 365;
@@ -113,9 +118,8 @@ async function readCustomFields(date: string, signal?: AbortSignal): Promise<Cus
 
 export default function Daybook({ userName }: { userName: string }) {
   const { language, locale, t } = useI18n();
-  const initialDate = dateKey(new Date());
-  const [view, setView] = useState<'daily' | 'cycles' | 'leetcode' | 'planner'>('daily');
-  const [dataVersion, setDataVersion] = useState(0);
+  const [initialDate] = useState(() => dateKey(new Date()));
+  const [view, setView] = useState<View>({ name: 'daily' });
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [entries, setEntries] = useState<Record<string, DayEntry>>({});
   const [taskText, setTaskText] = useState('');
@@ -149,39 +153,39 @@ export default function Daybook({ userName }: { userName: string }) {
   const saveSequenceRef = useRef(0);
   const saveErrorRef = useRef<unknown>(null);
   const isUnmountingRef = useRef(false);
+  const dayRequestRef = useRef<AbortController | null>(null);
+  const viewRequestRef = useRef<{ name: View['name']; controller: AbortController } | null>(null);
+  const selectedDateRef = useRef(initialDate);
+  const dailyNeedsRefreshRef = useRef(false);
 
-  useEffect(() => {
+  const loadDay = useCallback((date: string, pendingSave?: Promise<void>) => {
+    dayRequestRef.current?.abort();
     const controller = new AbortController();
-    // Loading follows the externally selected date.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSyncStatus('loading');
-    Promise.all([readEntry(selectedDate, controller.signal), readCustomFields(selectedDate, controller.signal)])
-      .then(([entry, fields]) => {
-        if (controller.signal.aborted) return;
-        revisionsRef.current[selectedDate] = entry.revision;
-        setEntries((current) => ({ ...current, [selectedDate]: entry }));
-        setCustomFields(fields);
-        setSyncStatus('saved');
-      })
-      .catch(() => { if (!controller.signal.aborted) setSyncStatus('error'); });
-    return () => controller.abort();
-  }, [selectedDate, dataVersion]);
+    dayRequestRef.current = controller;
+    const { signal } = controller;
+    void Promise.resolve(pendingSave).then(async () => {
+      if (signal.aborted) return;
+      const [entry, fields] = await Promise.all([readEntry(date, signal), readCustomFields(date, signal)]);
+      if (signal.aborted) return;
+      revisionsRef.current[date] = entry.revision;
+      setEntries((current) => ({ ...current, [date]: entry }));
+      setCustomFields(fields);
+      setSyncStatus('saved');
+    }).catch(() => { if (!signal.aborted) setSyncStatus('error'); });
+  }, []);
 
-  useEffect(() => {
-    if (view !== 'daily') return;
-    let active = true;
+  const loadDailyOptions = useCallback((signal: AbortSignal) => {
     Promise.all([
-      fetch('/api/cycles', { cache: 'no-store' }).then((response) => response.ok ? response.json() as Promise<{ cycles: CycleOption[] }> : Promise.reject()),
-      fetch('/api/day-sections', { cache: 'no-store' }).then((response) => response.ok ? response.json() as Promise<{ sections: DaySection[] }> : Promise.reject()),
+      readCycles(signal),
+      fetch('/api/day-sections', { cache: 'no-store', signal }).then((response) => response.ok ? response.json() as Promise<{ sections: DaySection[] }> : Promise.reject()),
     ])
-      .then(([cycleResult, sectionResult]: [{ cycles: CycleOption[] }, { sections: DaySection[] }]) => {
-        if (!active) return;
+      .then(([cycleResult, sectionResult]) => {
+        if (signal.aborted) return;
         setCycles(cycleResult.cycles);
         setSections(sectionResult.sections);
       })
       .catch(() => undefined);
-    return () => { active = false; };
-  }, [view, dataVersion]);
+  }, []);
 
   const entry = entries[selectedDate] ?? emptyEntry;
   const selected = fromDateKey(selectedDate);
@@ -202,6 +206,7 @@ export default function Daybook({ userName }: { userName: string }) {
     pendingDraftRef.current = null;
     if (!draft) return saveQueueRef.current;
     const sequence = ++saveSequenceRef.current;
+    const dayRequest = dayRequestRef.current;
     if (!isUnmountingRef.current) setSyncStatus('saving');
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
@@ -215,26 +220,34 @@ export default function Daybook({ userName }: { userName: string }) {
             const currentEntry = current[draft.date];
             return currentEntry ? { ...current, [draft.date]: { ...currentEntry, revision: saved.revision } } : current;
           });
-          if (sequence === saveSequenceRef.current) setSyncStatus('saved');
+          if (sequence === saveSequenceRef.current && dayRequestRef.current === dayRequest) setSyncStatus('saved');
         }
       })
       .catch((error) => {
         saveErrorRef.current = error;
-        if (!isUnmountingRef.current && sequence === saveSequenceRef.current) {
+        if (!isUnmountingRef.current && sequence === saveSequenceRef.current && dayRequestRef.current === dayRequest) {
           setSyncStatus(error instanceof SaveConflictError ? 'conflict' : 'error');
         }
       });
     return saveQueueRef.current;
   }, []);
 
-  useEffect(
-    () => () => {
+  // eslint-disable-next-line no-restricted-syntax -- The first client mount has no navigation event, and pending saves must flush on unmount.
+  useEffect(() => {
+    isUnmountingRef.current = false;
+    const controller = new AbortController();
+    const customTimers = customTimersRef.current;
+    viewRequestRef.current = { name: 'daily', controller };
+    void loadDay(initialDate);
+    loadDailyOptions(controller.signal);
+    return () => {
       isUnmountingRef.current = true;
+      dayRequestRef.current?.abort();
+      viewRequestRef.current?.controller.abort();
       void flushPendingSave();
-      Object.values(customTimersRef.current).forEach(clearTimeout);
-    },
-    [flushPendingSave],
-  );
+      Object.values(customTimers).forEach(clearTimeout);
+    };
+  }, [initialDate, loadDay, loadDailyOptions, flushPendingSave]);
 
   const updateEntry = (update: (current: DayEntry) => DayEntry, saveImmediately = false) => {
     const next = update(entry);
@@ -249,6 +262,13 @@ export default function Daybook({ userName }: { userName: string }) {
   };
 
   const changeSelectedDate = (date: string) => {
+    if (!date) return;
+    if (date !== selectedDateRef.current) {
+      const pendingSave = flushPendingSave();
+      setSyncStatus('loading');
+      loadDay(date, pendingSave);
+    }
+    selectedDateRef.current = date;
     setSelectedDate(date);
     setRepeatUntil(shiftDate(date, 6));
     setEditingTask(null);
@@ -355,7 +375,6 @@ export default function Daybook({ userName }: { userName: string }) {
       revisionsRef.current[selectedDate] = next.revision;
       setEntries((current) => ({ ...current, [selectedDate]: next }));
       setCompletingLeetCodeTask(null);
-      setDataVersion((current) => current + 1);
       setSyncStatus('saved');
     } catch (error) {
       setAttemptError(error instanceof Error ? error.message : '無法儲存這次作答。');
@@ -530,12 +549,49 @@ export default function Daybook({ userName }: { userName: string }) {
     window.location.replace('/');
   };
 
-  const showCycles = () => { void flushPendingSave().then(() => setView('cycles')); };
-  const showLeetCode = () => { void flushPendingSave().then(() => setView('leetcode')); };
-  const showPlanner = () => { void flushPendingSave().then(() => setView('planner')); };
+  const changeView = async (name: View['name'], refresh = false) => {
+    if (!refresh && name === viewRequestRef.current?.name) return;
+    viewRequestRef.current?.controller.abort();
+    const controller = new AbortController();
+    const { signal } = controller;
+    viewRequestRef.current = { name, controller };
+    await flushPendingSave();
+    if (signal.aborted) return;
+    if (name === 'cycles') {
+      setView({ name });
+      const initialData = await readCycles(signal).catch(() => null);
+      if (!signal.aborted) setView({ name, initialData });
+    } else if (name === 'leetcode') {
+      setView({ name });
+      const initialData = await readLeetCode(signal).catch(() => null);
+      if (!signal.aborted) setView({ name, initialData });
+    } else {
+      setView({ name });
+      if (name === 'daily') {
+        if (dailyNeedsRefreshRef.current) {
+          dailyNeedsRefreshRef.current = false;
+          setSyncStatus('loading');
+          loadDay(selectedDateRef.current);
+        }
+        loadDailyOptions(signal);
+      }
+    }
+  };
+
+  const handleCalendarChanged = () => {
+    if (isUnmountingRef.current) return;
+    dailyNeedsRefreshRef.current = true;
+    if (viewRequestRef.current?.name === 'daily') void changeView('daily', true);
+  };
+
   const handlePlannerApplied = (firstDate: string | null) => {
-    if (firstDate) setSelectedDate(firstDate);
-    setDataVersion((current) => current + 1);
+    if (isUnmountingRef.current) return;
+    if (firstDate) {
+      selectedDateRef.current = firstDate;
+      setSelectedDate(firstDate);
+      setRepeatUntil(shiftDate(firstDate, 6));
+    }
+    handleCalendarChanged();
   };
 
   const renderTask = (task: Task, index: number) => (
@@ -585,16 +641,16 @@ export default function Daybook({ userName }: { userName: string }) {
       <header className="site-header">
         <a className="brand" href="#top" aria-label={t('brandTop')}><span className="brand-mark" aria-hidden="true">{t('brandMark')}</span><span><strong>{t('brandName')}</strong><small>DAILY NOTES</small></span></a>
         <div className="header-meta">
-          <div className="view-switch" aria-label={t('navLabel')}><button type="button" className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>{t('navDaily')}</button><button type="button" className={view === 'cycles' ? 'active' : ''} onClick={showCycles}>{t('navCycles')}</button><button type="button" className={view === 'leetcode' ? 'active' : ''} onClick={showLeetCode}>LeetCode</button><button type="button" className={view === 'planner' ? 'active' : ''} onClick={showPlanner}>{t('navPlanner')}</button></div>
-          {view === 'daily' && <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status"><span className="status-dot" aria-hidden="true" />{statusText}</div>}
+          <div className="view-switch" aria-label={t('navLabel')}><button type="button" className={view.name === 'daily' ? 'active' : ''} onClick={() => void changeView('daily')}>{t('navDaily')}</button><button type="button" className={view.name === 'cycles' ? 'active' : ''} onClick={() => void changeView('cycles')}>{t('navCycles')}</button><button type="button" className={view.name === 'leetcode' ? 'active' : ''} onClick={() => void changeView('leetcode')}>LeetCode</button><button type="button" className={view.name === 'planner' ? 'active' : ''} onClick={() => void changeView('planner')}>{t('navPlanner')}</button></div>
+          {view.name === 'daily' && <div className={syncStatus === 'error' || syncStatus === 'conflict' ? 'save-status error' : 'save-status'} role="status"><span className="status-dot" aria-hidden="true" />{statusText}</div>}
           <AgentAccess />
           <button className="user-menu" type="button" onClick={signOut} title={userName}><span className="user-name">{userName}</span><span className="user-separator" aria-hidden="true"> · </span><span>{t('signOut')}</span></button>
         </div>
       </header>
 
-      {view === 'cycles' ? <Cycles key={dataVersion} /> : view === 'leetcode' ? (
-        <LeetCode key={dataVersion} onCalendarChanged={() => setDataVersion((current) => current + 1)} />
-      ) : view === 'planner' ? (
+      {view.name === 'cycles' ? <Cycles initialData={view.initialData} /> : view.name === 'leetcode' ? (
+        <LeetCode initialData={view.initialData} onCalendarChanged={handleCalendarChanged} />
+      ) : view.name === 'planner' ? (
         <PlannerChat selectedDate={selectedDate} onApplied={handlePlannerApplied} />
       ) : (
         <>
